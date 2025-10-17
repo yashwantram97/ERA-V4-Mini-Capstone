@@ -1,0 +1,6 @@
+torchvision
+torch
+pytorch_lightning
+pytorch_optimizer
+torchmetrics
+antialiased-cnns
