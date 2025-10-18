@@ -30,7 +30,8 @@ def train_with_lightning(
     batch_size: int = 64,
     learning_rate: float = learning_rate,
     experiment_name: str = "imagenet_training",
-    resume_from_checkpoint: str = None # Resume training from last checkpoint path 
+    resume_from_checkpoint: str = None, # Resume training from last checkpoint path 
+    use_sam: bool = False
 ):
     """
     Train Imagenet dataset on Resnet50 using PyTorch Lightning
@@ -41,6 +42,7 @@ def train_with_lightning(
         learning_rate: Learning rate for optimizer
         experiment_name: Name for the experiment (used in logging)
         resume_from_checkpoint: Path to checkpoint to resume training from where it stopped
+        use_sam: Whether to use SAM optimizer
     """
     print("🌩️ Starting PyTorch Lightning Training")
     print("=" * 60)

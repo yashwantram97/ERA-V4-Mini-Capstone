@@ -16,10 +16,12 @@ Benefits:
 """
 
 from utils import serialize_transforms
+from pytorch_optimizer import SAM
 import lightning as L
 import torch
 import torch.nn.functional as F
 import torchmetrics
+import antialiased_cnns
 from config import scheduler_type
 
 class ResnetLightningModule(L.LightningModule):
@@ -39,7 +41,8 @@ class ResnetLightningModule(L.LightningModule):
         weight_decay: float = 1e-4,
         num_classes: int = 100,
         train_transforms = None,
-        total_steps: int = None
+        total_steps: int = None,
+        use_sam: bool = False
         ):
         super().__init__()
         # Store hyperparameters
@@ -49,6 +52,8 @@ class ResnetLightningModule(L.LightningModule):
         self.total_steps = total_steps
         # Store transforms for hyperparameter logging
         self.train_transforms = train_transforms
+
+        self.use_sam = use_sam
 
         # We'll create a custom dict to include serialized transforms
         hparams_dict = {
@@ -65,8 +70,11 @@ class ResnetLightningModule(L.LightningModule):
         self.save_hyperparameters()
 
         # Initialize model
-        self.model = torch.hub.load("pytorch/vision", "resnet50", weights=None)
-        self.model.fc = torch.nn.Linear(self.model.fc.in_features, num_classes)
+        # self.model = torch.hub.load("pytorch/vision", "resnet50", weights=None)
+        # Use antialiased_cnns for implementing Blur Pool
+        self.model = antialiased_cnns.resnet50(pretrained=False)
+        # Skip number of classes in prediction layer as resnet50 already has 1000 classes
+        # self.model.fc = torch.nn.Linear(self.model.fc.in_features, num_classes)
 
         # Initialize metrics for each stage
         # Why separate metrics? Each stage (train/val/test) needs independent tracking
@@ -102,7 +110,7 @@ class ResnetLightningModule(L.LightningModule):
         
         # Forward pass
         logits = self(images) # Automatically calls self.forward(images)
-        loss = F.cross_entropy(logits, labels)
+        loss = F.cross_entropy(logits, labels, label_smoothing=0.1) # Added Label smoothing
         
         # Get predictions for metrics
         preds = torch.argmax(logits, dim=1)
@@ -160,7 +168,23 @@ class ResnetLightningModule(L.LightningModule):
             optimizer or dict with optimizer and scheduler
         """
 
-        optimizer = torch.optim.SGD(self.model.parameters(), lr=self.learning_rate, weight_decay=self.weight_decay, momentum=0.9)
+        if self.use_sam:
+            # Use SAM optimizer
+            base_optimizer = torch.optim.SGD
+            optimizer = SAM(
+                self.model.parameters(),
+                base_optimizer=base_optimizer,
+                lr=self.learning_rate,
+                weight_decay=self.weight_decay,
+                momentum=0.9
+            )
+        else:
+            optimizer = torch.optim.SGD(
+                self.model.parameters(),
+                lr=self.learning_rate,
+                weight_decay=self.weight_decay,
+                momentum=0.9
+            )
         
         if scheduler_type == 'one_cycle_policy':
             # Create OneCycle scheduler with EXACT parameters
@@ -216,3 +240,32 @@ class ResnetLightningModule(L.LightningModule):
                 "interval": "epoch"
             }
         }
+
+    def optimizer_step(self, epoch, batch_idx, optimizer, optimizer_closure):
+        """
+        Override optimizer step to support SAM's two-step optimization.
+        
+        This method is called by Lightning instead of optimizer.step().
+        For SAM, we need to:
+        1. First step: compute gradients and take ascent step
+        2. Second step: recompute gradients and take descent step
+        """
+        # Lightning wraps optimizers in LightningOptimizer
+        # Access the actual optimizer
+        actual_optimizer = optimizer.optimizer if hasattr(optimizer, 'optimizer') else optimizer
+
+        # Check if we're using SAM optimizer
+        if isinstance(actual_optimizer, SAM):
+            # SAM's two-step optimization
+            # Step 1: Ascent step (move to adversarial parameters)
+            actual_optimizer.first_step(zero_grad=True)
+            
+            # Step 2: Re-compute loss and gradients at adversarial parameters
+            # Lightning will handle the closure call for us
+            optimizer_closure()
+            
+            # Step 3: Descent step (update actual parameters)
+            actual_optimizer.second_step(zero_grad=True)
+        else:
+            # Standard optimizer step for non-SAM optimizers
+            optimizer.step(closure=optimizer_closure)
