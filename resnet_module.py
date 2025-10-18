@@ -23,6 +23,8 @@ import torch.nn.functional as F
 import torchmetrics
 import antialiased_cnns
 from config import scheduler_type
+import copy
+from torchinfo import summary
 
 class ResnetLightningModule(L.LightningModule):
     """
@@ -75,6 +77,8 @@ class ResnetLightningModule(L.LightningModule):
         self.model = antialiased_cnns.resnet50(pretrained=False)
         # Skip number of classes in prediction layer as resnet50 already has 1000 classes
         # self.model.fc = torch.nn.Linear(self.model.fc.in_features, num_classes)
+        # Use channels_last memory format for faster training
+        self.model = self.model.to(memory_format=torch.channels_last)
 
         # Initialize metrics for each stage
         # Why separate metrics? Each stage (train/val/test) needs independent tracking
@@ -269,3 +273,76 @@ class ResnetLightningModule(L.LightningModule):
         else:
             # Standard optimizer step for non-SAM optimizers
             optimizer.step(closure=optimizer_closure)
+
+    def on_train_start(self):
+        """Called at the start of training - log model graph"""
+        # Log model architecture to TensorBoard
+        if self.logger is None:
+            return
+        
+        try:
+            # 1. Log model graph to TensorBoard
+            sample_input = torch.randn(1, 3, 224, 224).to(self.device)
+            self.logger.experiment.add_graph(self, sample_input)
+            print("✅ Model graph logged to TensorBoard")
+            
+            # 2. Log model summary as text
+            try:
+                # Capture torchsummary output
+                arch_summary = summary(copy.deepcopy(self.model), input_size=(1, 3, 224, 224), verbose=0, device=self.device)
+                # Log to TensorBoard TEXT tab
+                self.logger.experiment.add_text(
+                    "Model/Architecture_Summary", 
+                    f"```\n{arch_summary}\n```",
+                    0
+                )
+                print("✅ Model summary logged to TensorBoard TEXT tab")
+                
+            except ImportError:
+                print("⚠️  ModelSummary not found. Install with: pip install torchinfo")
+
+            # 3. Log model parameters count
+            total_params = sum(p.numel() for p in self.parameters())
+            trainable_params = sum(p.numel() for p in self.parameters() if p.requires_grad)
+            
+            params_info = f"""
+            **Model Parameters:**
+            - Total Parameters: {total_params:,}
+            - Trainable Parameters: {trainable_params:,}
+            - Non-trainable Parameters: {total_params - trainable_params:,}
+            
+            **Model Architecture:**
+            {str(self.model)}
+            """
+            
+            self.logger.experiment.add_text(
+                "Model/Parameters_Info", 
+                params_info, 
+                0
+            )
+            print("✅ Model parameters info logged to TensorBoard")
+            
+        except Exception as e:
+            print(f"❌ Error logging model info: {e}")
+
+    def on_train_epoch_end(self):
+        """Called at the end of each training epoch"""
+        # Get current metrics
+        train_acc = self.train_accuracy.compute()
+        
+        self.logger.experiment.add_text(
+            "Training/Epoch_Results", 
+            f"🚀 Epoch {self.current_epoch}: Train Acc: {train_acc:.3f}",
+            self.current_epoch
+        )
+
+    def on_validation_epoch_end(self):
+        """Called at the end of each validation epoch"""
+        # Get current metrics
+        val_acc = self.val_accuracy.compute()
+        
+        self.logger.experiment.add_text(
+            "Validation/Epoch_Results", 
+            f"📊 Epoch {self.current_epoch}: Val Acc: {val_acc:.3f}",
+            self.current_epoch
+        )

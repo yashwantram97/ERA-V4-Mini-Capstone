@@ -21,8 +21,8 @@ from lightning.pytorch.loggers import TensorBoardLogger
 from imagenet_datamodule import ImageNetDataModule
 from resnet_module import ResnetLightningModule
 from text_logging_callback import TextLoggingCallback
-from config import weight_decay, learning_rate, logs_dir, epochs, batch_size, experiment_name, mean, std, total_steps, num_classes
-from utils import get_transforms
+from resolution_schedule_callback import ResolutionScheduleCallback
+from config import weight_decay, learning_rate, logs_dir, epochs, batch_size, experiment_name, mean, std, total_steps, num_classes, progressive_resizing_fixres_schedule
 from utils import get_relative_path
 
 def train_with_lightning(
@@ -31,7 +31,8 @@ def train_with_lightning(
     learning_rate: float = learning_rate,
     experiment_name: str = "imagenet_training",
     resume_from_checkpoint: str = None, # Resume training from last checkpoint path 
-    use_sam: bool = False
+    use_sam: bool = False,
+    resolution_schedule: dict = None
 ):
     """
     Train Imagenet dataset on Resnet50 using PyTorch Lightning
@@ -43,21 +44,32 @@ def train_with_lightning(
         experiment_name: Name for the experiment (used in logging)
         resume_from_checkpoint: Path to checkpoint to resume training from where it stopped
         use_sam: Whether to use SAM optimizer
+        resolution_schedule: Dict for progressive resizing/FixRes
+                             Example: {0: (128, True, 512), 10: (224, True, 320), 85: (288, False, 256)}
     """
     print("🌩️ Starting PyTorch Lightning Training")
     print("=" * 60)
 
+    # Determine initial resolution from schedule or use default
+    initial_resolution = 224
+    use_train_augs = True
+    if resolution_schedule:
+        # Get the config for epoch 0 (or first epoch in schedule)
+        first_epoch = min(resolution_schedule.keys())
+        config = resolution_schedule[first_epoch]
+        initial_resolution = config[0]
+        use_train_augs = config[1]
+        if len(config) > 2:
+            batch_size = config[2]  # Override batch size if specified
+    
     # 1. Create DataModule
     # DataModule handles all data operations
-    train_transforms = get_transforms(transform_type="train", mean=mean, std=std)
-    validation_transforms = get_transforms(transform_type="valid", mean=mean, std=std)
-
     print("📊 Setting up data...")
     datamodule = ImageNetDataModule(
         batch_size=batch_size,
         num_workers=8,  # Adjust based on your CPU
-        train_transforms=train_transforms,
-        valid_transforms=validation_transforms
+        initial_resolution=initial_resolution,
+        use_train_augs=use_train_augs
     )
 
     # 2. Create Lightning Module (Model)

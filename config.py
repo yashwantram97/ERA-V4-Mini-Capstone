@@ -47,6 +47,15 @@ epochs = 50
 batch_size = 128
 dynamic_batch_size = True
 
+# Define resolution schedule for Progressive Resizing + FixRes
+# Format: {epoch: (resolution, use_train_augs, batch_size)}
+# Set to None for No schedule, uses default 224px throughout the training
+prog_resizing_fixres_schedule = {
+    0: (128, True, 512),    # Epochs 0-9: 128px, train augs, BS=512
+    10: (224, True, 320),   # Epochs 10-84: 224px, train augs, BS=320
+    85: (288, False, 256),  # Epochs 85-90: 288px, test augs (FixRes), BS=256
+}
+
 dataset_size = 1281167 # Update this to the correct size
 batch_size_schedule = [] # Update this to the correct batch size schedule
 batch_size_schedule[:5] = [128] * 5 # 5 epochs at 128

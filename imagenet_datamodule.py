@@ -1,7 +1,8 @@
 import torchvision
 import lightning as L
 from torch.utils.data import DataLoader
-from config import train_img_dir, val_img_dir
+from config import train_img_dir, val_img_dir, mean, std
+from utils import get_transforms
 
 class ImageNetDataModule(L.LightningDataModule):
     """
@@ -17,30 +18,57 @@ class ImageNetDataModule(L.LightningDataModule):
         batch_size: int = 64,
         num_workers: int = 4,
         pin_memory: bool = True,
-        train_transforms = None,
-        valid_transforms = None,
+        initial_resolution: int = 224,  # Starting resolution
+        use_train_augs: bool = True,    # Whether to use train augmentations
     ):
         """
         Initialize the DataModule
+        
+        Args:
+            batch_size: Batch size for training
+            num_workers: Number of workers for data loading
+            pin_memory: Whether to pin memory for faster GPU transfer
+            initial_resolution: Starting image resolution (default 224)
+            use_train_augs: Whether to use training augmentations (default True)        
         """
         super().__init__()
 
         # Store hyperparameters - Lightning will log these automatically
-        # EXCLUDE transforms from hyperparameters to avoid conflicts
-        self.save_hyperparameters(ignore=['train_transforms', 'valid_transforms'])
+        self.save_hyperparameters()
 
         self.batch_size = batch_size
         self.num_workers = num_workers
         self.pin_memory = pin_memory
 
-        # Define transforms
-        self.train_transforms = train_transforms
-        
-        self.valid_transforms = valid_transforms
+        # Store resolution and augmentation settings
+        self.resolution = initial_resolution
+        self.use_train_augs = use_train_augs
         
         # Will be set in setup()
         self.train_dataset = None
         self.val_dataset = None
+
+    def update_resolution(self, resolution: int, use_train_augs: bool, batch_size: int = None):
+        """
+        Update resolution, augmentation type, and optionally batch size.
+        Called by ResolutionScheduleCallback during training.
+        
+        Args:
+            resolution: New image resolution (e.g., 128, 224, 288)
+            use_train_augs: True for train augmentations, False for test augmentations (FixRes)
+            batch_size: New batch size (optional, None keeps current batch size)
+        """
+        self.resolution = resolution
+        self.use_train_augs = use_train_augs
+        
+        if batch_size is not None:
+            self.batch_size = batch_size
+        
+        # Recreate datasets with new transforms
+        self.setup(stage='fit')
+        
+        print(f"✅ DataModule updated: {resolution}x{resolution}px, "
+              f"{'Train' if use_train_augs else 'Test'} augs, BS={self.batch_size}")
 
     def prepare_data(self):
         """
@@ -60,23 +88,38 @@ class ImageNetDataModule(L.LightningDataModule):
             stage: 'fit', 'validate', 'test', or 'predict'
         """
         if stage == 'fit' or stage is None:
+            # Generate transforms dynamically based on current settings
+            train_transforms = get_transforms(
+                transform_type="train" if self.use_train_augs else "valid",
+                mean=mean,
+                std=std,
+                resolution=self.resolution
+            )
+            
+            valid_transforms = get_transforms(
+                transform_type="valid",
+                mean=mean,
+                std=std,
+                resolution=self.resolution
+            )
+            
             # Create train dataset
             self.train_dataset = torchvision.datasets.ImageFolder(
                 root=train_img_dir,
-                transform=self.train_transforms
+                transform=train_transforms
             )
 
             self.val_dataset = torchvision.datasets.ImageFolder(
                 root=val_img_dir,
-                transform=self.valid_transforms
+                transform=valid_transforms
             )
 
         # Print dataset splits - only print what exists
-        print(f"📊 Dataset:")
         if hasattr(self, 'train_dataset') and self.train_dataset is not None:
-            print(f"   Train: {len(self.train_dataset)} samples (with augmentation)")
-        if hasattr(self, 'val_dataset') and self.val_dataset is not None:
-            print(f"   Val:   {len(self.val_dataset)} samples (without augmentation)")
+            aug_type = "Train" if self.use_train_augs else "Test (FixRes)"
+            print(f"📊 Dataset @ {self.resolution}x{self.resolution}px:")
+            print(f"   Train: {len(self.train_dataset)} samples ({aug_type} augmentation)")
+            print(f"   Val:   {len(self.val_dataset)} samples (Test augmentation)")
 
     def train_dataloader(self):
         """Return training dataloader"""

@@ -4,9 +4,18 @@ from albumentations.pytorch import ToTensorV2
 import cv2
 from config import PROJECT_ROOT
 
-def get_transforms(transform_type="train", mean=None, std=None):
+def get_transforms(transform_type="train", mean=None, std=None, resolution=224):
     """
-        To get the transform
+    Get transforms for training or validation
+    
+    Args:
+        transform_type: "train" or "valid"
+        mean: Normalization mean
+        std: Normalization std
+        resolution: Target image resolution (default 224)
+    
+    Returns:
+        List of Albumentations transforms
     """
     transforms = A.Compose([
             A.Normalize(mean=mean, std=std),
@@ -15,7 +24,7 @@ def get_transforms(transform_type="train", mean=None, std=None):
     if transform_type == "train":
         transforms = [
             A.RandomResizedCrop(
-                size=[224, 224],
+                size=[resolution, resolution],
                 scale=[0.5, 1],
                 ratio=[0.75, 1.3333333333333333],
                 interpolation=cv2.INTER_LINEAR
@@ -40,16 +49,17 @@ def get_transforms(transform_type="train", mean=None, std=None):
         ]+ transforms
 
     else:
+        # Validation/Test transforms - FixRes compatible
         transforms = [
             A.Resize(
-                height=256,
-                width=256,
+                height=int(resolution * 256 / 224),  # Scale proportionally
+                width=int(resolution * 256 / 224),
                 interpolation=cv2.INTER_LINEAR,
                 p=1.0
             ),
             A.CenterCrop(
-                height=224,
-                width=224,
+                height=resolution,
+                width=resolution,
                 p=1.0
             )
         ] + transforms
