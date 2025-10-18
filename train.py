@@ -19,13 +19,15 @@ from lightning.pytorch.callbacks import ModelCheckpoint, EarlyStopping, RichProg
 from lightning.pytorch.loggers import TensorBoardLogger
 
 # Import our Lightning components
-from utils import get_relative_path
+from utils import get_relative_path, get_batch_size_from_resolution_schedule, get_total_num_steps
 from config import (
     weight_decay,
     learning_rate,
     logs_dir,
     epochs,
+    dataset_size,
     batch_size,
+    dynamic_batch_size,
     experiment_name,
     total_steps,
     num_classes,
@@ -83,13 +85,32 @@ def train_with_lightning(
         use_train_augs=use_train_augs
     )
 
+    # IMPORTANT: Recalculate total_steps based on actual resolution schedule being used
+    # This ensures OneCycleLR has the correct total steps
+    actual_total_steps = total_steps  # Default from config
+    if resolution_schedule:
+        # Recalculate based on actual resolution schedule
+        actual_batch_size_schedule = get_batch_size_from_resolution_schedule(resolution_schedule, max_epochs)
+        actual_total_steps = get_total_num_steps(
+            dataset_size, 
+            batch_size, 
+            actual_batch_size_schedule, 
+            max_epochs, 
+            dynamic_batch_size
+        )
+        print(f"📊 Recalculated total_steps based on resolution schedule: {actual_total_steps:,}")
+    else:
+        print(f"📊 Using total_steps from config: {actual_total_steps:,}")
+    
+    
     # 2. Create Lightning Module (Model)
     print("🧠 Setting up model...")
     model = ResnetLightningModule(
         learning_rate=learning_rate,
         weight_decay=weight_decay,
-        total_steps=total_steps,
-        num_classes=num_classes
+        num_classes=num_classes,
+        total_steps=actual_total_steps,
+        use_sam=use_sam
     )
     
     # 3. Setup Callbacks
