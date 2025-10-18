@@ -13,17 +13,28 @@ Benefits over manual training loops:
 - Built-in validation
 - Easy to scale and extend
 """
+
 import lightning as L
 from lightning.pytorch.callbacks import ModelCheckpoint, EarlyStopping, RichProgressBar
 from lightning.pytorch.loggers import TensorBoardLogger
 
 # Import our Lightning components
+from utils import get_relative_path
+from config import (
+    weight_decay,
+    learning_rate,
+    logs_dir,
+    epochs,
+    batch_size,
+    experiment_name,
+    total_steps,
+    num_classes,
+    prog_resizing_fixres_schedule,
+)
 from imagenet_datamodule import ImageNetDataModule
 from resnet_module import ResnetLightningModule
 from text_logging_callback import TextLoggingCallback
 from resolution_schedule_callback import ResolutionScheduleCallback
-from config import weight_decay, learning_rate, logs_dir, epochs, batch_size, experiment_name, mean, std, total_steps, num_classes, progressive_resizing_fixres_schedule
-from utils import get_relative_path
 
 def train_with_lightning(
     max_epochs: int = 20,
@@ -77,7 +88,6 @@ def train_with_lightning(
     model = ResnetLightningModule(
         learning_rate=learning_rate,
         weight_decay=weight_decay,
-        train_transforms=train_transforms,
         total_steps=total_steps,
         num_classes=num_classes
     )
@@ -113,6 +123,20 @@ def train_with_lightning(
         experiment_name=experiment_name
     )
 
+    # Resolution Schedule Callback (Progressive Resizing + FixRes)
+    callbacks_list = [
+        checkpoint_callback,
+        early_stop_callback,
+        progress_bar,
+        text_logger,
+    ]
+
+    # Add resolution schedule callback if provided
+    if resolution_schedule:
+        resolution_callback = ResolutionScheduleCallback(schedule=resolution_schedule)
+        callbacks_list.append(resolution_callback)
+        print("✅ Resolution schedule enabled with FixRes")
+
     # 4. Setup Logger
     # Lightning integrates with many loggers (TensorBoard, Weights & Biases, etc.)
     logger = TensorBoardLogger(
@@ -129,13 +153,7 @@ def train_with_lightning(
         max_epochs=max_epochs,
         
         # Callbacks
-        callbacks=[
-            checkpoint_callback,
-            early_stop_callback,
-            progress_bar,
-            text_logger,  # Add text logging
-            # model_summary_callback
-        ],
+        callbacks=callbacks_list,
         
         # Logger
         logger=logger,
@@ -204,7 +222,9 @@ if __name__ == "__main__":
         max_epochs=epochs,
         batch_size=batch_size,
         learning_rate=learning_rate,
-        experiment_name=experiment_name
+        experiment_name=experiment_name,
+        resolution_schedule=prog_resizing_fixres_schedule,  # Enable Progressive Resizing + FixRes
+        use_sam=False  # Set to True to use SAM optimizer
     )
     
     print("\n🎯 To view training progress:")

@@ -57,10 +57,26 @@ prog_resizing_fixres_schedule = {
 }
 
 dataset_size = 1281167 # Update this to the correct size
-batch_size_schedule = [] # Update this to the correct batch size schedule
-batch_size_schedule[:5] = [128] * 5 # 5 epochs at 128
-batch_size_schedule[5:10] = [64] * 5 # 5 epochs at 64
-batch_size_schedule[-1] = 32 # Rest epoch at 32
 
-from utils import get_total_num_steps
+# Import utility functions
+from utils import get_total_num_steps, get_batch_size_from_resolution_schedule
+
+# Extract batch sizes from resolution schedule if using dynamic batch sizing
+if dynamic_batch_size and prog_resizing_fixres_schedule:
+    batch_size_schedule = get_batch_size_from_resolution_schedule(prog_resizing_fixres_schedule, epochs)
+else:
+    # Fallback to old-style schedule or None
+    batch_size_schedule = None
+
+# Calculate total steps for OneCycleLR scheduler
 total_steps = get_total_num_steps(dataset_size, batch_size, batch_size_schedule, epochs, dynamic_batch_size)
+
+### Example
+# Assumes batch_size=128 for all 90 epochs
+# total_steps = 90 * (1281167 // 128) = 90 * 10009 = 900,810 steps
+# With dynamic batch sizing and set resolution schedule):
+# Epochs 0-9: BS=512  → 10 * (1281167 // 512) = 10 * 2502 = 25,020 steps
+# Epochs 10-84: BS=320 → 75 * (1281167 // 320) = 75 * 4004 = 300,300 steps  
+# Epochs 85-89: BS=256 → 5 * (1281167 // 256) = 5 * 5005 = 25,025 steps
+# Total: 25,020 + 300,300 + 25,025 = 350,345 steps
+# That's a huge difference (900K vs 350K steps)! 
