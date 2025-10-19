@@ -1,0 +1,23 @@
+[project]
+name = "era-v4-mini-capstone"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "albumentationsx>=2.0.12",
+    "antialiased-cnns>=0.3",
+    "ipykernel>=7.0.1",
+    "lightning>=2.5.5",
+    "matplotlib>=3.10.7",
+    "numpy>=2.3.4",
+    "pandas>=2.3.3",
+    "pillow>=12.0.0",
+    "pytorch-optimizer>=3.8.1",
+    "rich>=14.2.0",
+    "tensorboardx>=2.6.4",
+    "torch>=2.9.0",
+    "torch-lr-finder>=0.2.2",
+    "torchinfo>=1.8.0",
+    "torchvision>=0.24.0",
+]
