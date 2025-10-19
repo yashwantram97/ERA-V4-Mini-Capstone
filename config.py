@@ -21,10 +21,10 @@ num_classes = 1000
 
 num_workers: int = -1,
 
-learning_rate = 1.13e-01 # Found with LR finder
+learning_rate = 2.11E-03 # Found with LR finder
 weight_decay = 1e-4
 
-experiment_name = "experiment1"
+experiment_name = "imagenet_training_code_test"
 
 scheduler_type = 'one_cycle_policy'
 

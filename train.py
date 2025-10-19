@@ -199,11 +199,14 @@ def train_with_lightning(
         log_every_n_steps=50,    # Log metrics every 50 steps
         
         # Performance settings
-        precision="16-mixed",     # Use 16-bit mixed precision for speed (you can use 32-true for more precision)
+        # precision="16-mixed",     # Use 16-bit mixed precision for speed (you can use 32-true for more precision)
         
         # Progress bar
         enable_progress_bar=True,
         # enable_model_summary=True,
+
+        # Reload Dataloader for fixres, dynamic batch sizing and progressive resizing
+        reload_dataloaders_every_n_epochs=1,
     )
 
     # 6. Start Training!

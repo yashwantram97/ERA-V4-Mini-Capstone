@@ -11,14 +11,12 @@ import torch.nn.functional as F
 
 def main():
     train_transforms = get_transforms(transform_type="valid", mean=mean, std=std)
-    validation_transforms = get_transforms(transform_type="valid", mean=mean, std=std)
+    # validation_transforms = get_transforms(transform_type="valid", mean=mean, std=std)
 
     imagenet_dm = ImageNetDataModule(
         batch_size=64,
         num_workers=8,
-        pin_memory=True,
-        train_transforms=train_transforms,
-        valid_transforms=validation_transforms
+        pin_memory=True
     )
 
     imagenet_dm.setup(stage='fit')  # This creates imagenet_train, imagenet_val datasets

@@ -63,6 +63,9 @@ class ResolutionScheduleCallback(Callback):
                 # Force recreation of dataloaders with new transforms
                 # This is necessary for Lightning to pick up the changes
                 self._reset_dataloaders(trainer)
+
+                # ✅ Verify the changes actually took effect
+                self._verify_dataloader_changes(trainer, size, batch_size)
                 
                 self._last_applied_epoch = current_epoch
             else:
@@ -76,19 +79,171 @@ class ResolutionScheduleCallback(Callback):
         When we change resolution/augmentations, we need fresh dataloaders.
         """
         try:
-            # Reset train dataloader
-            if hasattr(trainer, 'fit_loop') and hasattr(trainer.fit_loop, '_data_source'):
-                trainer.fit_loop._data_source.instance = None
-                trainer.fit_loop.setup_data()
-            
-            # Reset validation dataloader
-            if hasattr(trainer, '_evaluation_loop') and hasattr(trainer._evaluation_loop, '_data_source'):
-                trainer._evaluation_loop._data_source.instance = None
-            
-            print("✅ Dataloaders reset successfully")
+            # Lightning will automatically reload if reload_dataloaders_every_n_epochs=1
+            print("✅ DataModule updated - dataloaders will reload at epoch start")
         except Exception as e:
             print(f"⚠️  Warning: Could not reset dataloaders automatically: {e}")
-            print("   Dataloaders will update on next epoch")
+        # try:
+        #     # Reset train dataloader
+        #     if hasattr(trainer, 'fit_loop') and hasattr(trainer.fit_loop, '_data_source'):
+        #         trainer.fit_loop._data_source.instance = None
+        #         trainer.fit_loop.setup_data()
+            
+        #     # Reset validation dataloader
+        #     if hasattr(trainer, '_evaluation_loop') and hasattr(trainer._evaluation_loop, '_data_source'):
+        #         trainer._evaluation_loop._data_source.instance = None
+            
+        #     print("✅ Dataloaders reset successfully")
+        # except Exception as e:
+        #     print(f"⚠️  Warning: Could not reset dataloaders automatically: {e}")
+        #     print("   Dataloaders will update on next epoch")
+
+    def _verify_dataloader_changes(self, trainer: L.Trainer, expected_resolution: int, expected_batch_size: int):
+        """
+        Verify that dataloader changes actually took effect by inspecting a sample batch.
+        
+        Args:
+            trainer: Lightning Trainer
+            expected_resolution: Expected image resolution
+            expected_batch_size: Expected batch size
+        """
+        try:
+            print("\n🔍 VERIFICATION - Checking actual dataloader properties:")
+            print("-" * 60)
+            
+            # Get the train dataloader
+            train_dataloader = trainer.train_dataloader
+            if train_dataloader is None:
+                print("⚠️  Cannot verify: train_dataloader is None")
+                return
+            
+            # Check batch size from dataloader config
+            actual_batch_size = train_dataloader.batch_size
+            print(f"   Expected Batch Size: {expected_batch_size}")
+            print(f"   Actual Batch Size:   {actual_batch_size}")
+            if actual_batch_size == expected_batch_size:
+                print("   ✅ Batch size matches!")
+            else:
+                print(f"   ❌ Batch size MISMATCH!")
+            
+            # Get a sample batch to check image dimensions
+            try:
+                # Get iterator and fetch one batch
+                batch_iterator = iter(train_dataloader)
+                sample_batch = next(batch_iterator)
+                
+                # Extract images (first element of batch)
+                images = sample_batch[0]
+                
+                # Check actual batch size from tensor
+                actual_tensor_batch_size = images.shape[0]
+                print(f"   Actual Tensor Batch Size: {actual_tensor_batch_size}")
+                
+                # Check image dimensions
+                actual_height = images.shape[2]
+                actual_width = images.shape[3]
+                print(f"   Expected Resolution: {expected_resolution}x{expected_resolution}")
+                print(f"   Actual Resolution:   {actual_height}x{actual_width}")
+                
+                if actual_height == expected_resolution and actual_width == expected_resolution:
+                    print("   ✅ Image resolution matches!")
+                else:
+                    print(f"   ❌ Image resolution MISMATCH!")
+                
+                print(f"   Image shape: {images.shape} (batch, channels, height, width)")
+                
+            except StopIteration:
+                print("⚠️  Cannot get sample batch - dataloader is empty")
+            except Exception as e:
+                print(f"⚠️  Error getting sample batch: {e}")
+            
+            # ✅ NEW: List actual transform names
+            print("\n   📝 Active Transforms:")
+            if hasattr(trainer.datamodule, 'train_dataset'):
+                dataset = trainer.datamodule.train_dataset
+                if hasattr(dataset, 'transform'):
+                    transform = dataset.transform
+                    self._print_transforms(transform, indent="      ")
+            else:
+                print("      ⚠️  Cannot access transforms")
+            
+            print("-" * 60)
+            
+        except Exception as e:
+            print(f"⚠️  Verification failed: {e}")
+    
+    def _print_transforms(self, transform, indent=""):
+        """
+        Recursively print transform names and their key parameters.
+        
+        Args:
+            transform: Transform object (Compose, list, or individual transform)
+            indent: Indentation string for nested transforms
+        """
+        import albumentations as A
+        
+        try:
+            # Handle Albumentations Compose
+            if isinstance(transform, A.Compose):
+                for i, t in enumerate(transform.transforms, 1):
+                    self._print_single_transform(t, i, indent)
+            
+            # Handle list of transforms
+            elif isinstance(transform, list):
+                for i, t in enumerate(transform, 1):
+                    if isinstance(t, A.Compose):
+                        self._print_transforms(t, indent)
+                    else:
+                        self._print_single_transform(t, i, indent)
+            
+            # Single transform
+            else:
+                self._print_single_transform(transform, 1, indent)
+                
+        except Exception as e:
+            print(f"{indent}⚠️  Error listing transforms: {e}")
+    
+    def _print_single_transform(self, transform, index, indent=""):
+        """
+        Print a single transform with its key parameters.
+        
+        Args:
+            transform: Single transform object
+            index: Transform index number
+            indent: Indentation string
+        """
+        transform_name = transform.__class__.__name__
+        
+        # Extract key parameters for common transforms
+        params = []
+        
+        # For resize/crop operations
+        if hasattr(transform, 'height') and hasattr(transform, 'width'):
+            params.append(f"size={transform.height}x{transform.width}")
+        elif hasattr(transform, 'size'):
+            if isinstance(transform.size, (list, tuple)):
+                params.append(f"size={transform.size[0]}x{transform.size[1]}")
+            else:
+                params.append(f"size={transform.size}")
+        
+        # For probability
+        if hasattr(transform, 'p') and transform.p < 1.0:
+            params.append(f"p={transform.p}")
+        
+        # For scale/ratio (RandomResizedCrop)
+        if hasattr(transform, 'scale'):
+            params.append(f"scale={transform.scale}")
+        if hasattr(transform, 'ratio'):
+            params.append(f"ratio={transform.ratio}")
+        
+        # For normalization
+        if hasattr(transform, 'mean') and hasattr(transform, 'std'):
+            if transform.mean is not None:
+                params.append(f"mean={transform.mean[:3] if len(transform.mean) > 3 else transform.mean}")
+        
+        # Format output
+        param_str = f" ({', '.join(params)})" if params else ""
+        print(f"{indent}{index}. {transform_name}{param_str}")
 
     def on_train_start(self, trainer: L.Trainer, pl_module: L.LightningModule):
         """Called at the start of training - log the schedule"""
