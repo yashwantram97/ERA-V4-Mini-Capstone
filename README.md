@@ -61,6 +61,43 @@ This project supports two dataset variants:
 | 70-85 | 224px     | 77% → 78%          | Near convergence |
 | 85-90 | 288px     | 78% → 79%+         | FixRes boost |
 
+## ⚙️ Hardware-Specific Configurations
+
+This project includes **three optimized hardware profiles** that automatically configure batch sizes, workers, and training parameters for your hardware:
+
+### Available Profiles
+
+| Profile | Hardware | GPUs | Batch Size | Workers | Use Case |
+|---------|----------|------|------------|---------|----------|
+| `local` | MacBook M4 Pro | 1 (MPS) | 32-64 | 4 | Development & Testing |
+| `g5d` | AWS g5d.12xlarge | 4x A10G | 256-512 | 12 | Cost-Effective Training |
+| `p3` | AWS p3.16xlarge | 8x V100 | 256-768 | 16 | Production Training |
+
+### Quick Start
+
+```bash
+# Train on your local MacBook M4 Pro
+python train.py --config local
+
+# Train on AWS g5d.12xlarge (4x A10G)
+python train.py --config g5d
+
+# Train on AWS p3.16xlarge (8x V100)
+python train.py --config p3
+
+# List all available configurations
+python train.py --list-configs
+```
+
+Each profile includes:
+- ✅ Optimized batch sizes for progressive resizing
+- ✅ Appropriate worker counts for data loading
+- ✅ Hardware-specific precision settings
+- ✅ Multi-GPU strategy configuration
+- ✅ Memory-optimized settings
+
+For detailed configuration options, see [`configs/README.md`](configs/README.md).
+
 ## 🚀 Getting Started
 
 ### Prerequisites
@@ -98,44 +135,71 @@ Required packages:
 
 ### Training
 
-#### Local Training (ImageNet-Mini on M4 Pro)
+#### Using Configuration Profiles (Recommended)
+
+The easiest way to train is using the hardware-specific configuration system:
+
 ```bash
-jupyter notebook notebook-local.ipynb
+# Basic training
+python train.py --config local   # For MacBook M4 Pro
+python train.py --config g5d     # For AWS g5d.12xlarge
+python train.py --config p3      # For AWS p3.16xlarge
+
+# Advanced options
+python train.py --config g5d --use-sam                    # Use SAM optimizer
+python train.py --config g5d --lr 0.001                   # Custom learning rate
+python train.py --config p3 --resume path/to/last.ckpt   # Resume training
+python train.py --config p3 --lr 0.005 --use-sam         # Combine options
+
+# Find optimal learning rate
+python find_lr.py --config local
+python find_lr.py --config g5d --lr 0.0001  # Custom starting LR
 ```
 
-Configuration:
-- Batch sizes: 128 → 64 → 32
-- Single GPU (MPS)
-- 4 data loading workers
+#### Using Jupyter Notebooks (Alternative)
 
-#### Production Training (Full ImageNet on AWS p3.16xlarge)
 ```bash
+# Local training (ImageNet-Mini on M4 Pro)
+jupyter notebook notebook-local.ipynb
+
+# Production training (Full ImageNet on AWS p3.16xlarge)
 jupyter notebook notebook-p3.16xlarge.ipynb
 ```
-
-Configuration:
-- Batch sizes: 512 → 320 → 256 per GPU
-- 8x NVIDIA V100 GPUs
-- Distributed training enabled
 
 ## 📁 Project Structure
 
 ```
 .
-├── notebook-local.ipynb        # Local training (M4 Pro + ImageNet-Mini)
-├── notebook-p3.16xlarge.ipynb  # Production training (8x V100 + ImageNet-1K)
-├── notebook.ipynb              # General notebook
-├── recipes.md                  # Detailed explanation of all techniques
-├── requirements.txt            # Python dependencies
-├── lightning_logs/             # Training logs and metrics
-└── imagenet-mini/              # Dataset directory
-    ├── train/                  # Training images
-    └── val/                    # Validation images
+├── train.py                    # Main training script with config support
+├── find_lr.py                  # Learning rate finder with config support
+├── config.py                   # Configuration loader (backward compatible)
+├── configs/                    # Hardware-specific configurations
+│   ├── README.md              # Detailed configuration documentation
+│   ├── local_config.py        # MacBook M4 Pro settings
+│   ├── g5d_config.py          # AWS g5d.12xlarge settings
+│   ├── p3_config.py           # AWS p3.16xlarge settings
+│   └── config_manager.py      # Configuration management system
+├── src/                        # Source code
+│   ├── models/                # Model architectures
+│   ├── data_modules/          # Data loading and preprocessing
+│   ├── callbacks/             # Training callbacks
+│   └── utils/                 # Utility functions
+├── notebooks/                  # Jupyter notebooks for experimentation
+│   ├── notebook-local.ipynb   # Local training (M4 Pro + ImageNet-Mini)
+│   └── notebook-p3.16xlarge.ipynb  # Production (8x V100 + ImageNet-1K)
+├── docs/
+│   └── recipes.md             # Detailed explanation of techniques
+├── logs/                      # Training logs and checkpoints
+└── dataset/                   # Dataset directory
+    └── imagenet-mini/
+        ├── train/
+        └── val/
 ```
 
 ## 📚 Documentation
 
-- **[recipes.md](recipes.md)** - In-depth explanation of all training techniques with papers and code examples
+- **[configs/README.md](configs/README.md)** - Complete guide to hardware configurations
+- **[docs/recipes.md](docs/recipes.md)** - In-depth explanation of all training techniques with papers and code examples
 
 ## 🛠️ Hardware Configurations
 
