@@ -12,8 +12,14 @@ Benefits over manual training loops:
 - Automatic device handling
 - Built-in validation
 - Easy to scale and extend
+
+Usage:
+    python train.py --config local   # For MacBook M4 Pro
+    python train.py --config g5d     # For AWS g5d.12xlarge
+    python train.py --config p3      # For AWS p3.16xlarge
 """
 
+import argparse
 import lightning as L
 from lightning.pytorch.callbacks import ModelCheckpoint, EarlyStopping, RichProgressBar
 from lightning.pytorch.loggers import TensorBoardLogger
@@ -21,99 +27,84 @@ from pathlib import Path
 
 # Import our Lightning components
 from src.utils.utils import get_relative_path, get_batch_size_from_resolution_schedule, get_total_num_steps
-from config import (
-    weight_decay,
-    learning_rate,
-    logs_dir,
-    epochs,
-    dataset_size,
-    batch_size,
-    dynamic_batch_size,
-    experiment_name,
-    num_classes,
-    prog_resizing_fixres_schedule,
-)
 from src.data_modules.imagenet_datamodule import ImageNetDataModule
 from src.models.resnet_module import ResnetLightningModule
 from src.callbacks.text_logging_callback import TextLoggingCallback
 from src.callbacks.resolution_schedule_callback import ResolutionScheduleCallback
 
+# Import new config system
+from configs import get_config, list_configs, ConfigProfile
+
 def train_with_lightning(
-    max_epochs: int = 20,
-    batch_size: int = 64,
-    learning_rate: float = learning_rate,
-    experiment_name: str = "imagenet_training",
-    resume_from_checkpoint: str = None, # Resume training from last checkpoint path 
+    config: ConfigProfile,
+    resume_from_checkpoint: str = None,
     use_sam: bool = False,
-    resolution_schedule: dict = None
 ):
     """
-    Train Imagenet dataset on Resnet50 using PyTorch Lightning
+    Train ImageNet dataset on ResNet50 using PyTorch Lightning
     
     Args:
-        max_epochs: Maximum number of epochs
-        batch_size: Batch size for training
-        learning_rate: Learning rate for optimizer
-        experiment_name: Name for the experiment (used in logging)
+        config: ConfigProfile object with all training settings
         resume_from_checkpoint: Path to checkpoint to resume training from where it stopped
         use_sam: Whether to use SAM optimizer
-        resolution_schedule: Dict for progressive resizing/FixRes
-                             Example: {0: (128, True, 512), 10: (224, True, 320), 85: (288, False, 256)}
     """
     print("🌩️ Starting PyTorch Lightning Training")
     print("=" * 60)
+    print(config)
 
     # Determine initial resolution from schedule or use default
     initial_resolution = 224
     use_train_augs = True
-    if resolution_schedule:
+    batch_size = config.batch_size
+    
+    if config.prog_resizing_fixres_schedule:
         # Get the config for epoch 0 (or first epoch in schedule)
-        first_epoch = min(resolution_schedule.keys())
-        config = resolution_schedule[first_epoch]
-        initial_resolution = config[0]
-        use_train_augs = config[1]
-        if len(config) > 2:
-            batch_size = config[2]  # Override batch size if specified
+        first_epoch = min(config.prog_resizing_fixres_schedule.keys())
+        schedule_config = config.prog_resizing_fixres_schedule[first_epoch]
+        initial_resolution = schedule_config[0]
+        use_train_augs = schedule_config[1]
+        if len(schedule_config) > 2:
+            batch_size = schedule_config[2]  # Override batch size if specified
     
     # 1. Create DataModule
     # DataModule handles all data operations
     print("📊 Setting up data...")
     datamodule = ImageNetDataModule(
         batch_size=batch_size,
-        num_workers=8,  # Adjust based on your CPU
+        num_workers=config.num_workers,
         initial_resolution=initial_resolution,
         use_train_augs=use_train_augs
     )
 
     # IMPORTANT: Recalculate total_steps based on actual resolution schedule being used
     # This ensures OneCycleLR has the correct total steps
-    # Use resolution schedule (either passed or from config)
-    active_resolution_schedule = resolution_schedule if resolution_schedule is not None else prog_resizing_fixres_schedule
-    
-    if active_resolution_schedule and dynamic_batch_size:
+    if config.prog_resizing_fixres_schedule and config.dynamic_batch_size:
         # Calculate based on dynamic batch size from resolution schedule
-        actual_batch_size_schedule = get_batch_size_from_resolution_schedule(active_resolution_schedule, max_epochs)
+        actual_batch_size_schedule = get_batch_size_from_resolution_schedule(
+            config.prog_resizing_fixres_schedule, 
+            config.epochs
+        )
         actual_total_steps = get_total_num_steps(
-            dataset_size, 
-            batch_size, 
+            config.dataset_size, 
+            config.batch_size, 
             actual_batch_size_schedule, 
-            max_epochs, 
-            dynamic_batch_size
+            config.epochs, 
+            config.dynamic_batch_size
         )
         print(f"📊 Calculated total_steps for OneCycleLR: {actual_total_steps:,}")
-        print(f"   Resolution schedule: {len(active_resolution_schedule)} transitions")
+        print(f"   Resolution schedule: {len(config.prog_resizing_fixres_schedule)} transitions")
         print(f"   Batch sizes used: {set(bs for bs in actual_batch_size_schedule if bs)}")
     else:
         # Fixed batch size - simple calculation
-        actual_total_steps = max_epochs * ((dataset_size + batch_size - 1) // batch_size)
-        print(f"📊 Calculated total_steps (fixed BS={batch_size}): {actual_total_steps:,}")
+        actual_total_steps = config.epochs * ((config.dataset_size + config.batch_size - 1) // config.batch_size)
+        print(f"📊 Calculated total_steps (fixed BS={config.batch_size}): {actual_total_steps:,}")
     
     # 2. Create Lightning Module (Model)
     print("🧠 Setting up model...")
     model = ResnetLightningModule(
-        learning_rate=learning_rate,
-        weight_decay=weight_decay,
-        num_classes=num_classes,
+        learning_rate=config.learning_rate,
+        weight_decay=config.weight_decay,
+        num_classes=config.num_classes,
         total_steps=actual_total_steps,
         use_sam=use_sam
     )
@@ -123,19 +114,19 @@ def train_with_lightning(
     print("⚙️ Setting up callbacks...")
     # Model Checkpointing - saves best models automatically
     checkpoint_callback = ModelCheckpoint(
-        dirpath=logs_dir / experiment_name / "lightning_checkpoints",
+        dirpath=config.logs_dir / config.experiment_name / "lightning_checkpoints",
         filename="imagenet1k-{epoch:02d}-{val/accuracy:.3f}",
         monitor="val/accuracy",  # Metric to monitor
         mode="max",             # Save model with highest accuracy
-        save_top_k=1,           # Keep top 3 models
-        save_last=True,         # Save the last model
+        save_top_k=config.save_top_k,
+        save_last=config.save_last,
         verbose=True
     )
 
     # Early Stopping - stops training if no improvement
     early_stop_callback = EarlyStopping(
         monitor="val/loss",     # Metric to monitor
-        patience=5,             # Number of epochs to wait
+        patience=config.early_stopping_patience,
         verbose=True,
         mode="min"             # Stop when val_loss stops decreasing
     )
@@ -145,8 +136,8 @@ def train_with_lightning(
 
     # Text Logging Callback - creates detailed text logs
     text_logger = TextLoggingCallback(
-        log_dir=logs_dir,
-        experiment_name=experiment_name
+        log_dir=config.logs_dir,
+        experiment_name=config.experiment_name
     )
 
     # Resolution Schedule Callback (Progressive Resizing + FixRes)
@@ -158,56 +149,44 @@ def train_with_lightning(
     ]
 
     # Add resolution schedule callback if provided
-    if resolution_schedule:
-        resolution_callback = ResolutionScheduleCallback(schedule=resolution_schedule)
+    if config.prog_resizing_fixres_schedule:
+        resolution_callback = ResolutionScheduleCallback(schedule=config.prog_resizing_fixres_schedule)
         callbacks_list.append(resolution_callback)
         print("✅ Resolution schedule enabled with FixRes")
 
     # 4. Setup Logger
     # Lightning integrates with many loggers (TensorBoard, Weights & Biases, etc.)
     logger = TensorBoardLogger(
-        save_dir=logs_dir / experiment_name / "lightning_logs",
-        name=experiment_name,
+        save_dir=config.logs_dir / config.experiment_name / "lightning_logs",
+        name=config.experiment_name,
         version=None  # Auto-increment version numbers
     )
 
     # 5. Create Trainer
     # Trainer orchestrates the entire training process
     print("⚡ Setting up Lightning Trainer...")
+    
+    # Build trainer kwargs
+    trainer_kwargs = {
+        "max_epochs": config.epochs,
+        "callbacks": callbacks_list,
+        "logger": logger,
+        "accelerator": "auto",
+        "devices": config.num_devices if config.num_devices else "auto",
+        "deterministic": True,
+        "check_val_every_n_epoch": config.check_val_every_n_epoch,
+        "log_every_n_steps": config.log_every_n_steps,
+        "precision": config.precision,
+        "gradient_clip_val": config.gradient_clip_val,
+        "enable_progress_bar": True,
+        "reload_dataloaders_every_n_epochs": 1,
+    }
+    
+    # Add strategy for multi-GPU training
+    if config.strategy:
+        trainer_kwargs["strategy"] = config.strategy
 
-    trainer = L.Trainer(
-        max_epochs=max_epochs,
-        
-        # Callbacks
-        callbacks=callbacks_list,
-        
-        # Logger
-        logger=logger,
-        
-        # Hardware settings
-        accelerator="auto",      # Automatically choose GPU/CPU
-        devices="auto",          # Use all available devices
-        
-        # Training settings
-        # gradient_clip_val=0.5,   # Gradient clipping for stability
-        deterministic=True,      # For reproducibility
-        
-        # Validation settings
-        check_val_every_n_epoch=1,  # Validate every epoch
-        
-        # Logging settings
-        log_every_n_steps=50,    # Log metrics every 50 steps
-        
-        # Performance settings
-        # precision="16-mixed",     # Use 16-bit mixed precision for speed (you can use 32-true for more precision)
-        
-        # Progress bar
-        enable_progress_bar=True,
-        # enable_model_summary=True,
-
-        # Reload Dataloader for fixres, dynamic batch sizing and progressive resizing
-        reload_dataloaders_every_n_epochs=1,
-    )
+    trainer = L.Trainer(**trainer_kwargs)
 
     # 6. Start Training!
     print("🚀 Starting training...")
@@ -246,19 +225,103 @@ def train_with_lightning(
 
     return None
 
-if __name__ == "__main__":
-    # Example usage
+def main():
+    """Main entry point with argument parsing."""
+    parser = argparse.ArgumentParser(
+        description="Train ResNet50 on ImageNet with hardware-specific configurations",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  # Train on local MacBook M4 Pro
+  python train.py --config local
+  
+  # Train on AWS g5d.12xlarge
+  python train.py --config g5d
+  
+  # Train on AWS p3.16xlarge with SAM optimizer
+  python train.py --config p3 --use-sam
+  
+  # Custom learning rate
+  python train.py --config g5d --lr 0.001
+  
+  # Resume from checkpoint
+  python train.py --config g5d --resume logs/experiment/checkpoints/last.ckpt
+  
+  # List available configs
+  python train.py --list-configs
+        """
+    )
+    
+    parser.add_argument(
+        '--config',
+        type=str,
+        default='local',
+        choices=['local', 'g5d', 'p3'],
+        help='Hardware configuration profile (default: local)'
+    )
+    
+    parser.add_argument(
+        '--resume',
+        type=str,
+        default=None,
+        help='Path to checkpoint to resume training from'
+    )
+    
+    parser.add_argument(
+        '--use-sam',
+        action='store_true',
+        help='Use SAM optimizer instead of AdamW'
+    )
+    
+    parser.add_argument(
+        '--lr', '--learning-rate',
+        type=float,
+        default=None,
+        dest='learning_rate',
+        help='Learning rate (overrides config value if provided)'
+    )
+    
+    parser.add_argument(
+        '--list-configs',
+        action='store_true',
+        help='List all available configuration profiles and exit'
+    )
+    
+    args = parser.parse_args()
+    
+    # List configs if requested
+    if args.list_configs:
+        print("\n" + "=" * 70)
+        print("Available Hardware Configuration Profiles")
+        print("=" * 70)
+        configs = list_configs()
+        for name, description in configs.items():
+            print(f"\n📋 {name:10s} - {description}")
+        print("\n" + "=" * 70)
+        return
+    
+    # Load configuration
+    print(f"\n🔧 Loading configuration: {args.config}")
+    config = get_config(args.config)
+    
+    # Override learning rate if provided via command line
+    if args.learning_rate is not None:
+        print(f"⚡ Overriding learning rate: {config.learning_rate:.2e} → {args.learning_rate:.2e}")
+        config.learning_rate = args.learning_rate
+    
+    # Start training
     train_with_lightning(
-        max_epochs=epochs,
-        batch_size=batch_size,
-        learning_rate=learning_rate,
-        experiment_name=experiment_name,
-        resolution_schedule=prog_resizing_fixres_schedule,  # Enable Progressive Resizing + FixRes
-        use_sam=False  # Set to True to use SAM optimizer
+        config=config,
+        resume_from_checkpoint=args.resume,
+        use_sam=args.use_sam
     )
     
     print("\n🎯 To view training progress:")
-    print("tensorboard --logdir lightning_logs")
+    print(f"tensorboard --logdir {config.logs_dir / config.experiment_name / 'lightning_logs'}")
     print("\n🔍 To load the best model:")
     print("model = ResnetLightningModule.load_from_checkpoint('path/to/checkpoint.ckpt')")
+
+
+if __name__ == "__main__":
+    main()
     
