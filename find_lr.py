@@ -27,7 +27,7 @@ def main():
     lit_module = ResnetLightningModule(
         learning_rate=learning_rate,
         weight_decay=weight_decay,
-        num_classes=100,
+        num_classes=1000,
         train_transforms=train_transforms
     )
     model = lit_module.model
