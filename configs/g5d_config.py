@@ -1,5 +1,5 @@
 """
-Configuration for AWS g5d.12xlarge Instance
+Configuration for AWS g5.12xlarge Instance
 
 Hardware Specs:
 - CPUs: 48 vCPUs (24 cores, Intel Xeon)
@@ -18,8 +18,8 @@ from pathlib import Path
 from .base_config import *
 
 # Hardware profile name
-PROFILE_NAME = "g5d"
-PROFILE_DESCRIPTION = "AWS g5d.12xlarge - 4x NVIDIA A10G GPUs"
+PROFILE_NAME = "g5"
+PROFILE_DESCRIPTION = "AWS g5.12xlarge - 4x NVIDIA A10G GPUs"
 
 # Dataset paths (AWS EC2 environment)
 TRAIN_IMG_DIR = Path("/home/ec2-user/imagenet1k/train")

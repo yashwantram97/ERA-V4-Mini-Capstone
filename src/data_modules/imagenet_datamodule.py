@@ -1,7 +1,6 @@
 import torchvision
 import lightning as L
 from torch.utils.data import DataLoader
-from config import train_img_dir, val_img_dir, mean, std
 from src.utils.utils import get_transforms
 from src.data_modules.imagenet_dataset import ImageNetDataset
 
@@ -16,6 +15,10 @@ class ImageNetDataModule(L.LightningDataModule):
     """
     def __init__(
         self,
+        train_img_dir,
+        val_img_dir,
+        mean,
+        std,
         batch_size: int = 64,
         num_workers: int = 4,
         pin_memory: bool = True,
@@ -26,6 +29,10 @@ class ImageNetDataModule(L.LightningDataModule):
         Initialize the DataModule
         
         Args:
+            train_img_dir: Path to training images directory
+            val_img_dir: Path to validation images directory
+            mean: Normalization mean values
+            std: Normalization std values
             batch_size: Batch size for training
             num_workers: Number of workers for data loading
             pin_memory: Whether to pin memory for faster GPU transfer
@@ -36,6 +43,12 @@ class ImageNetDataModule(L.LightningDataModule):
 
         # Store hyperparameters - Lightning will log these automatically
         self.save_hyperparameters()
+
+        # Store dataset paths and normalization constants
+        self.train_img_dir = train_img_dir
+        self.val_img_dir = val_img_dir
+        self.mean = mean
+        self.std = std
 
         self.batch_size = batch_size
         self.num_workers = num_workers
@@ -92,26 +105,26 @@ class ImageNetDataModule(L.LightningDataModule):
             # Generate transforms dynamically based on current settings
             train_transforms = get_transforms(
                 transform_type="train" if self.use_train_augs else "valid",
-                mean=mean,
-                std=std,
+                mean=self.mean,
+                std=self.std,
                 resolution=self.resolution
             )
             
             valid_transforms = get_transforms(
                 transform_type="valid",
-                mean=mean,
-                std=std,
+                mean=self.mean,
+                std=self.std,
                 resolution=self.resolution
             )
             
             # Create train dataset
             self.train_dataset = ImageNetDataset(
-                root=train_img_dir,
+                root=self.train_img_dir,
                 transform=train_transforms
             )
 
             self.val_dataset = ImageNetDataset(
-                root=val_img_dir,
+                root=self.val_img_dir,
                 transform=valid_transforms
             )
 

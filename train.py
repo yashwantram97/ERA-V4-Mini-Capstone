@@ -15,7 +15,7 @@ Benefits over manual training loops:
 
 Usage:
     python train.py --config local   # For MacBook M4 Pro
-    python train.py --config g5d     # For AWS g5d.12xlarge
+    python train.py --config g5     # For AWS g5.12xlarge
     python train.py --config p3      # For AWS p3.16xlarge
 """
 
@@ -70,6 +70,10 @@ def train_with_lightning(
     # DataModule handles all data operations
     print("📊 Setting up data...")
     datamodule = ImageNetDataModule(
+        train_img_dir=config.train_img_dir,
+        val_img_dir=config.val_img_dir,
+        mean=config.mean,
+        std=config.std,
         batch_size=batch_size,
         num_workers=config.num_workers,
         initial_resolution=initial_resolution,
@@ -235,17 +239,17 @@ Examples:
   # Train on local MacBook M4 Pro
   python train.py --config local
   
-  # Train on AWS g5d.12xlarge
-  python train.py --config g5d
+  # Train on AWS g5.12xlarge
+  python train.py --config g5
   
   # Train on AWS p3.16xlarge with SAM optimizer
   python train.py --config p3 --use-sam
   
   # Custom learning rate
-  python train.py --config g5d --lr 0.001
+  python train.py --config g5 --lr 0.001
   
   # Resume from checkpoint
-  python train.py --config g5d --resume logs/experiment/checkpoints/last.ckpt
+  python train.py --config g5 --resume logs/experiment/checkpoints/last.ckpt
   
   # List available configs
   python train.py --list-configs
@@ -256,7 +260,7 @@ Examples:
         '--config',
         type=str,
         default='local',
-        choices=['local', 'g5d', 'p3'],
+        choices=['local', 'g5', 'p3'],
         help='Hardware configuration profile (default: local)'
     )
     

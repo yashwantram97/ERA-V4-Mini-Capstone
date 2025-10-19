@@ -70,7 +70,7 @@ This project includes **three optimized hardware profiles** that automatically c
 | Profile | Hardware | GPUs | Batch Size | Workers | Use Case |
 |---------|----------|------|------------|---------|----------|
 | `local` | MacBook M4 Pro | 1 (MPS) | 32-64 | 4 | Development & Testing |
-| `g5d` | AWS g5d.12xlarge | 4x A10G | 256-512 | 12 | Cost-Effective Training |
+| `g5` | AWS g5.12xlarge | 4x A10G | 256-512 | 12 | Cost-Effective Training |
 | `p3` | AWS p3.16xlarge | 8x V100 | 256-768 | 16 | Production Training |
 
 ### Quick Start
@@ -79,8 +79,8 @@ This project includes **three optimized hardware profiles** that automatically c
 # Train on your local MacBook M4 Pro
 python train.py --config local
 
-# Train on AWS g5d.12xlarge (4x A10G)
-python train.py --config g5d
+# Train on AWS g5.12xlarge (4x A10G)
+python train.py --config g5
 
 # Train on AWS p3.16xlarge (8x V100)
 python train.py --config p3
@@ -142,18 +142,18 @@ The easiest way to train is using the hardware-specific configuration system:
 ```bash
 # Basic training
 python train.py --config local   # For MacBook M4 Pro
-python train.py --config g5d     # For AWS g5d.12xlarge
+python train.py --config g5     # For AWS g5.12xlarge
 python train.py --config p3      # For AWS p3.16xlarge
 
 # Advanced options
-python train.py --config g5d --use-sam                    # Use SAM optimizer
-python train.py --config g5d --lr 0.001                   # Custom learning rate
+python train.py --config g5 --use-sam                    # Use SAM optimizer
+python train.py --config g5 --lr 0.001                   # Custom learning rate
 python train.py --config p3 --resume path/to/last.ckpt   # Resume training
 python train.py --config p3 --lr 0.005 --use-sam         # Combine options
 
 # Find optimal learning rate
 python find_lr.py --config local
-python find_lr.py --config g5d --lr 0.0001  # Custom starting LR
+python find_lr.py --config g5 --lr 0.0001  # Custom starting LR
 ```
 
 #### Using Jupyter Notebooks (Alternative)
@@ -176,7 +176,7 @@ jupyter notebook notebook-p3.16xlarge.ipynb
 ├── configs/                    # Hardware-specific configurations
 │   ├── README.md              # Detailed configuration documentation
 │   ├── local_config.py        # MacBook M4 Pro settings
-│   ├── g5d_config.py          # AWS g5d.12xlarge settings
+│   ├── g5d_config.py          # AWS g5.12xlarge settings
 │   ├── p3_config.py           # AWS p3.16xlarge settings
 │   └── config_manager.py      # Configuration management system
 ├── src/                        # Source code

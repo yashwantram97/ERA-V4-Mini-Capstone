@@ -82,15 +82,9 @@ class ResnetLightningModule(L.LightningModule):
 
         # Initialize metrics for each stage
         # Why separate metrics? Each stage (train/val/test) needs independent tracking
-        self.train_accuracy = torchmetrics.Accuracy(task="multiclass", num_classes=num_classes)
-        self.train_precision = torchmetrics.Precision(task="multiclass", num_classes=num_classes, average='macro')
-        self.train_recall = torchmetrics.Recall(task="multiclass", num_classes=num_classes, average='macro')
-        self.train_f1 = torchmetrics.F1Score(task="multiclass", num_classes=num_classes, average='macro')
+        self.train_accuracy = torchmetrics.Accuracy(task="multiclass", num_classes=num_classes, top_k=1)
         
-        self.val_accuracy = torchmetrics.Accuracy(task="multiclass", num_classes=num_classes)
-        self.val_precision = torchmetrics.Precision(task="multiclass", num_classes=num_classes, average='macro')
-        self.val_recall = torchmetrics.Recall(task="multiclass", num_classes=num_classes, average='macro')
-        self.val_f1 = torchmetrics.F1Score(task="multiclass", num_classes=num_classes, average='macro')
+        self.val_accuracy = torchmetrics.Accuracy(task="multiclass", num_classes=num_classes, top_k=1)
         
         # Add example input for model graph logging
         self.example_input_array = torch.randn(1, 3, 224, 224)
@@ -116,21 +110,13 @@ class ResnetLightningModule(L.LightningModule):
         logits = self(images) # Automatically calls self.forward(images)
         loss = F.cross_entropy(logits, labels, label_smoothing=0.1) # Added Label smoothing
         
-        # Get predictions for metrics
-        preds = torch.argmax(logits, dim=1)
-        
-        # Update metrics
-        self.train_accuracy(preds, labels)
-        self.train_precision(preds, labels)
-        self.train_recall(preds, labels)
-        self.train_f1(preds, labels)
+        # Update metrics (pass logits directly for top-k accuracy)
+        self.train_accuracy(logits, labels)
         
         # Log metrics - Lightning handles the logging automatically
+        # Note: Only log loss on_step for performance. Metrics synced only on_epoch to avoid DDP overhead
         self.log('train/loss', loss, on_step=True, on_epoch=True, prog_bar=True)
-        self.log('train/accuracy', self.train_accuracy, on_step=True, on_epoch=True, prog_bar=True)
-        self.log('train/precision', self.train_precision, on_step=False, on_epoch=True)
-        self.log('train/recall', self.train_recall, on_step=False, on_epoch=True)
-        self.log('train/f1_score', self.train_f1, on_step=False, on_epoch=True)
+        self.log('train/accuracy', self.train_accuracy, on_step=False, on_epoch=True, prog_bar=True)
 
         return loss
 
@@ -148,21 +134,12 @@ class ResnetLightningModule(L.LightningModule):
         logits = self(images)
         loss = F.cross_entropy(logits, labels)
         
-        # Get predictions for metrics
-        preds = torch.argmax(logits, dim=1)
+        # Update metrics (pass logits directly for top-k accuracy)
+        self.val_accuracy(logits, labels)
         
-        # Update metrics
-        self.val_accuracy(preds, labels)
-        self.val_precision(preds, labels)
-        self.val_recall(preds, labels)
-        self.val_f1(preds, labels)
-        
-        # Log metrics
+        # Log metrics - only log on_epoch to avoid DDP sync overhead
         self.log('val/loss', loss, on_step=False, on_epoch=True, prog_bar=True)
-        self.log('val/accuracy', self.val_accuracy, on_step=True, on_epoch=True, prog_bar=True)
-        self.log('val/precision', self.val_precision, on_step=False, on_epoch=True)
-        self.log('val/recall', self.val_recall, on_step=False, on_epoch=True)
-        self.log('val/f1_score', self.val_f1, on_step=False, on_epoch=True)
+        self.log('val/accuracy', self.val_accuracy, on_step=False, on_epoch=True, prog_bar=True)
 
     def configure_optimizers(self):
         """
@@ -172,22 +149,22 @@ class ResnetLightningModule(L.LightningModule):
             optimizer or dict with optimizer and scheduler
         """
 
-        if self.use_sam:
-            # Use SAM optimizer
-            base_optimizer = torch.optim.SGD
-            optimizer = SAM(
-                self.model.parameters(),
-                base_optimizer=base_optimizer,
-                lr=self.learning_rate,
-                weight_decay=self.weight_decay,
-                momentum=0.9
-            )
-        else:
-            optimizer = torch.optim.SGD(
-                self.model.parameters(),
-                lr=self.learning_rate,
-                weight_decay=self.weight_decay,
-                momentum=0.9
+        # if self.use_sam:
+        #     # Use SAM optimizer
+        #     base_optimizer = torch.optim.SGD
+        #     optimizer = SAM(
+        #         self.model.parameters(),
+        #         base_optimizer=base_optimizer,
+        #         lr=self.learning_rate,
+        #         weight_decay=self.weight_decay,
+        #         momentum=0.9
+        #     )
+        # else:
+        optimizer = torch.optim.SGD(
+            self.model.parameters(),
+            lr=self.learning_rate,
+            weight_decay=self.weight_decay,
+            momentum=0.9
             )
         
         if scheduler_type == 'one_cycle_policy':

@@ -27,8 +27,8 @@ This directory contains hardware-specific configuration profiles optimized for d
 
 **Expected Training Time:** ~20-30 minutes for 10 epochs
 
-### 2. AWS g5d.12xlarge (`g5d`)
-**Profile Name:** `g5d`  
+### 2. AWS g5.12xlarge (`g5`)
+**Profile Name:** `g5`  
 **Best for:** Production training, good cost/performance balance
 
 **Hardware:**
@@ -84,20 +84,20 @@ This directory contains hardware-specific configuration profiles optimized for d
 # Train on local MacBook M4 Pro
 python train.py --config local
 
-# Train on AWS g5d.12xlarge
-python train.py --config g5d
+# Train on AWS g5.12xlarge
+python train.py --config g5
 
 # Train on AWS p3.16xlarge with SAM optimizer
 python train.py --config p3 --use-sam
 
 # Override learning rate (uses config value if not specified)
-python train.py --config g5d --lr 0.001
+python train.py --config g5 --lr 0.001
 
 # Combine multiple options
 python train.py --config p3 --lr 0.005 --use-sam
 
 # Resume from checkpoint
-python train.py --config g5d --resume logs/experiment/checkpoints/last.ckpt
+python train.py --config g5 --resume logs/experiment/checkpoints/last.ckpt
 
 # List available configs
 python train.py --list-configs
@@ -110,7 +110,7 @@ from configs import get_config
 # Get a specific configuration
 config = get_config('local')
 # or
-config = get_config('g5d')
+config = get_config('g5')
 # or
 config = get_config('p3')
 
@@ -243,7 +243,7 @@ configs/
 ├── base_config.py           # Shared configuration
 ├── config_manager.py        # Configuration management
 ├── local_config.py          # MacBook M4 Pro config
-├── g5d_config.py           # AWS g5d.12xlarge config
+├── g5d_config.py           # AWS g5.12xlarge config
 └── p3_config.py            # AWS p3.16xlarge config
 ```
 

@@ -134,7 +134,7 @@ def _load_config_module(profile_name: str):
     """Load configuration module by profile name."""
     config_map = {
         'local': 'configs.local_config',
-        'g5d': 'configs.g5d_config',
+        'g5': 'configs.g5d_config',
         'p3': 'configs.p3_config',
     }
     
@@ -154,14 +154,14 @@ def get_config(profile_name: str = 'local') -> ConfigProfile:
     Get configuration for specified hardware profile.
     
     Args:
-        profile_name: One of 'local', 'g5d', or 'p3'
+        profile_name: One of 'local', 'g5', or 'p3'
         
     Returns:
         ConfigProfile object with all settings
         
     Examples:
         >>> config = get_config('local')
-        >>> config = get_config('g5d')
+        >>> config = get_config('g5')
         >>> config = get_config('p3')
     """
     module = _load_config_module(profile_name)
@@ -213,7 +213,7 @@ def list_configs() -> Dict[str, str]:
     """
     profiles = {}
     
-    for profile_name in ['local', 'g5d', 'p3']:
+    for profile_name in ['local', 'g5', 'p3']:
         try:
             module = _load_config_module(profile_name)
             profiles[profile_name] = getattr(module, 'PROFILE_DESCRIPTION')
@@ -237,7 +237,7 @@ def print_all_configs():
     print("\n" + "=" * 70)
     print("Usage:")
     print("  python train.py --config local")
-    print("  python train.py --config g5d")
+    print("  python train.py --config g5")
     print("  python train.py --config p3")
     print("=" * 70 + "\n")
 
@@ -247,7 +247,7 @@ if __name__ == "__main__":
     print_all_configs()
     
     # Demo: load and display each config
-    for profile in ['local', 'g5d', 'p3']:
+    for profile in ['local', 'g5', 'p3']:
         config = get_config(profile)
         print(config)
 
