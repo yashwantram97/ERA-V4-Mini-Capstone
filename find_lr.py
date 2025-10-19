@@ -5,7 +5,7 @@ Finds optimal learning rate for training using the LR range test.
 
 Usage:
     python find_lr.py --config local
-    python find_lr.py --config g5d
+    python find_lr.py --config g5
     python find_lr.py --config p3
 """
 
@@ -27,7 +27,7 @@ def main():
         '--config',
         type=str,
         default='local',
-        choices=['local', 'g5d', 'p3'],
+        choices=['local', 'g5', 'p3'],
         help='Hardware configuration profile (default: local)'
     )
     parser.add_argument(
@@ -73,10 +73,15 @@ def main():
 
     # Setup data module
     imagenet_dm = ImageNetDataModule(
+        train_img_dir=config.train_img_dir,
+        val_img_dir=config.val_img_dir,
+        mean=config.mean,
+        std=config.std,
         batch_size=config.batch_size,
         num_workers=config.num_workers,
         pin_memory=True
     )
+
 
     imagenet_dm.setup(stage='fit')
 

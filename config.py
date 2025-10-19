@@ -7,8 +7,8 @@ Choose the appropriate configuration for your hardware:
 1. MacBook M4 Pro (local development):
    python train.py --config local
 
-2. AWS g5d.12xlarge (4x A10G GPUs):
-   python train.py --config g5d
+2. AWS g5.12xlarge (4x A10G GPUs):
+   python train.py --config g5
 
 3. AWS p3.16xlarge (8x V100 GPUs):
    python train.py --config p3
