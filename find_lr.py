@@ -1,24 +1,22 @@
-from lr_finder_utils import run_lr_finder
+from src.utils.lr_finder_utils import run_lr_finder
 from config import (
     lr_finder_kwargs, mean, std, logs_dir,
     experiment_name, learning_rate, weight_decay
 )
-from utils import get_transforms
-from imagenet_datamodule import ImageNetDataModule
-from resnet_module import ResnetLightningModule
+from src.utils.utils import get_transforms
+from src.data_modules.imagenet_datamodule import ImageNetDataModule
+from src.models.resnet_module import ResnetLightningModule
 import torch
 import torch.nn.functional as F
 
 def main():
     train_transforms = get_transforms(transform_type="valid", mean=mean, std=std)
-    validation_transforms = get_transforms(transform_type="valid", mean=mean, std=std)
+    # validation_transforms = get_transforms(transform_type="valid", mean=mean, std=std)
 
     imagenet_dm = ImageNetDataModule(
         batch_size=64,
         num_workers=8,
-        pin_memory=True,
-        train_transforms=train_transforms,
-        valid_transforms=validation_transforms
+        pin_memory=True
     )
 
     imagenet_dm.setup(stage='fit')  # This creates imagenet_train, imagenet_val datasets

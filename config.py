@@ -9,8 +9,8 @@ std = tuple([0.229, 0.224, 0.225])
 PROJECT_ROOT = Path(__file__).parent
 
 # Dataset directories
-train_img_dir = PROJECT_ROOT / "dataset" / "train" # Update this to the correct path
-val_img_dir = PROJECT_ROOT / "dataset" / "val" # Update this to the correct path
+train_img_dir = PROJECT_ROOT / "dataset"/ "imagenet-mini" / "train" # Update this to the correct path
+val_img_dir = PROJECT_ROOT / "dataset" / "imagenet-mini" / "val" # Update this to the correct path
 logs_dir = PROJECT_ROOT / "logs"
 
 # Device
@@ -21,10 +21,10 @@ num_classes = 1000
 
 num_workers: int = -1,
 
-learning_rate = 1.13e-01 # Found with LR finder
+learning_rate = 2.11E-03 # Found with LR finder
 weight_decay = 1e-4
 
-experiment_name = "experiment1"
+experiment_name = "imagenet_training_code_test"
 
 scheduler_type = 'one_cycle_policy'
 

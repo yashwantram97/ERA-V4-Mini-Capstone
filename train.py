@@ -20,7 +20,7 @@ from lightning.pytorch.loggers import TensorBoardLogger
 from pathlib import Path
 
 # Import our Lightning components
-from utils import get_relative_path, get_batch_size_from_resolution_schedule, get_total_num_steps
+from src.utils.utils import get_relative_path, get_batch_size_from_resolution_schedule, get_total_num_steps
 from config import (
     weight_decay,
     learning_rate,
@@ -33,10 +33,10 @@ from config import (
     num_classes,
     prog_resizing_fixres_schedule,
 )
-from imagenet_datamodule import ImageNetDataModule
-from resnet_module import ResnetLightningModule
-from text_logging_callback import TextLoggingCallback
-from resolution_schedule_callback import ResolutionScheduleCallback
+from src.data_modules.imagenet_datamodule import ImageNetDataModule
+from src.models.resnet_module import ResnetLightningModule
+from src.callbacks.text_logging_callback import TextLoggingCallback
+from src.callbacks.resolution_schedule_callback import ResolutionScheduleCallback
 
 def train_with_lightning(
     max_epochs: int = 20,
@@ -199,11 +199,14 @@ def train_with_lightning(
         log_every_n_steps=50,    # Log metrics every 50 steps
         
         # Performance settings
-        precision="16-mixed",     # Use 16-bit mixed precision for speed (you can use 32-true for more precision)
+        # precision="16-mixed",     # Use 16-bit mixed precision for speed (you can use 32-true for more precision)
         
         # Progress bar
         enable_progress_bar=True,
         # enable_model_summary=True,
+
+        # Reload Dataloader for fixres, dynamic batch sizing and progressive resizing
+        reload_dataloaders_every_n_epochs=1,
     )
 
     # 6. Start Training!

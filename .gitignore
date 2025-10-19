@@ -5,7 +5,8 @@ build/
 dist/
 wheels/
 *.egg-info
-dataset/
+dataset/*
+!dataset/.gitkeep
 .DS_Store
 
 # Virtual environments
@@ -13,3 +14,7 @@ dataset/
 
 # Custom Files
 temp.ipynb
+
+# Logs
+logs/*
+!logs/.gitkeep

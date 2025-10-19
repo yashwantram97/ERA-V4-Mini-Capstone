@@ -15,7 +15,7 @@ Benefits:
 - Built-in best practices
 """
 
-from utils import serialize_transforms
+from src.utils.utils import serialize_transforms
 from pytorch_optimizer import SAM
 import lightning as L
 import torch

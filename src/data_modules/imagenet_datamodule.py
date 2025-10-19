@@ -2,8 +2,8 @@ import torchvision
 import lightning as L
 from torch.utils.data import DataLoader
 from config import train_img_dir, val_img_dir, mean, std
-from utils import get_transforms
-from imagenet_dataset import ImageNetDataset
+from src.utils.utils import get_transforms
+from src.data_modules.imagenet_dataset import ImageNetDataset
 
 class ImageNetDataModule(L.LightningDataModule):
     """

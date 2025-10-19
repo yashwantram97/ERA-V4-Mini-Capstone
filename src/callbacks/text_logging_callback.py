@@ -17,7 +17,7 @@ from datetime import datetime
 from pathlib import Path
 import torch
 from torchinfo import summary
-from utils import get_relative_path
+from src.utils.utils import get_relative_path
 from config import input_size
 
 class TextLoggingCallback(Callback):

@@ -20,4 +20,5 @@ dependencies = [
     "torch-lr-finder>=0.2.2",
     "torchinfo>=1.8.0",
     "torchvision>=0.24.0",
+    "tensorboard>=2.20.0",
 ]
