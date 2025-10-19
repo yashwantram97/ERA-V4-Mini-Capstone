@@ -17,6 +17,7 @@ Benefits over manual training loops:
 import lightning as L
 from lightning.pytorch.callbacks import ModelCheckpoint, EarlyStopping, RichProgressBar
 from lightning.pytorch.loggers import TensorBoardLogger
+from pathlib import Path
 
 # Import our Lightning components
 from utils import get_relative_path, get_batch_size_from_resolution_schedule, get_total_num_steps
@@ -29,7 +30,6 @@ from config import (
     batch_size,
     dynamic_batch_size,
     experiment_name,
-    total_steps,
     num_classes,
     prog_resizing_fixres_schedule,
 )
@@ -87,10 +87,12 @@ def train_with_lightning(
 
     # IMPORTANT: Recalculate total_steps based on actual resolution schedule being used
     # This ensures OneCycleLR has the correct total steps
-    actual_total_steps = total_steps  # Default from config
-    if resolution_schedule:
-        # Recalculate based on actual resolution schedule
-        actual_batch_size_schedule = get_batch_size_from_resolution_schedule(resolution_schedule, max_epochs)
+    # Use resolution schedule (either passed or from config)
+    active_resolution_schedule = resolution_schedule if resolution_schedule is not None else prog_resizing_fixres_schedule
+    
+    if active_resolution_schedule and dynamic_batch_size:
+        # Calculate based on dynamic batch size from resolution schedule
+        actual_batch_size_schedule = get_batch_size_from_resolution_schedule(active_resolution_schedule, max_epochs)
         actual_total_steps = get_total_num_steps(
             dataset_size, 
             batch_size, 
@@ -98,10 +100,13 @@ def train_with_lightning(
             max_epochs, 
             dynamic_batch_size
         )
-        print(f"📊 Recalculated total_steps based on resolution schedule: {actual_total_steps:,}")
+        print(f"📊 Calculated total_steps for OneCycleLR: {actual_total_steps:,}")
+        print(f"   Resolution schedule: {len(active_resolution_schedule)} transitions")
+        print(f"   Batch sizes used: {set(bs for bs in actual_batch_size_schedule if bs)}")
     else:
-        print(f"📊 Using total_steps from config: {actual_total_steps:,}")
-    
+        # Fixed batch size - simple calculation
+        actual_total_steps = max_epochs * ((dataset_size + batch_size - 1) // batch_size)
+        print(f"📊 Calculated total_steps (fixed BS={batch_size}): {actual_total_steps:,}")
     
     # 2. Create Lightning Module (Model)
     print("🧠 Setting up model...")
@@ -210,8 +215,9 @@ def train_with_lightning(
     # Automatic checkpoint detection for resuming training
     if resume_from_checkpoint is None:
         # Try to find last checkpoint automatically
-        checkpoint_callback.dirpath.mkdir(parents=True, exist_ok=True)
-        last_ckpt = checkpoint_callback.dirpath / "last.ckpt"
+        # Convert string to Path object before calling mkdir
+        Path(checkpoint_callback.dirpath).mkdir(parents=True, exist_ok=True)
+        last_ckpt = Path(checkpoint_callback.dirpath) / "last.ckpt"
         if last_ckpt.exists():
             resume_from_checkpoint = str(last_ckpt)
             print(f"🔄 Found existing checkpoint, resuming from: {get_relative_path(resume_from_checkpoint)}")

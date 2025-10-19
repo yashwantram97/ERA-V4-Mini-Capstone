@@ -93,7 +93,7 @@ class ResnetLightningModule(L.LightningModule):
         self.val_f1 = torchmetrics.F1Score(task="multiclass", num_classes=num_classes, average='macro')
         
         # Add example input for model graph logging
-        self.example_input_array = torch.randn(1, 3, 32, 32)
+        self.example_input_array = torch.randn(1, 3, 224, 224)
     
     def forward(self, x):
         """Forward pass - just call the model"""

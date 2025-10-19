@@ -3,6 +3,7 @@ import lightning as L
 from torch.utils.data import DataLoader
 from config import train_img_dir, val_img_dir, mean, std
 from utils import get_transforms
+from imagenet_dataset import ImageNetDataset
 
 class ImageNetDataModule(L.LightningDataModule):
     """
@@ -104,12 +105,12 @@ class ImageNetDataModule(L.LightningDataModule):
             )
             
             # Create train dataset
-            self.train_dataset = torchvision.datasets.ImageFolder(
+            self.train_dataset = ImageNetDataset(
                 root=train_img_dir,
                 transform=train_transforms
             )
 
-            self.val_dataset = torchvision.datasets.ImageFolder(
+            self.val_dataset = ImageNetDataset(
                 root=val_img_dir,
                 transform=valid_transforms
             )

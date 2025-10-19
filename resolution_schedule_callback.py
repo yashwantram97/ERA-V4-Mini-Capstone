@@ -46,27 +46,27 @@ class ResolutionScheduleCallback(Callback):
             else:
                 size, use_train_augs, batch_size = config
 
-        # Log the change
-        msg = f"\n{'='*60}\n"
-        msg += f"📐 Resolution Schedule - Epoch {current_epoch}\n"
-        msg += f"   Resolution: {size}x{size}px\n"
-        msg += f"   Augmentation: {'Train (RandomResizedCrop + Flip)' if use_train_augs else 'Test (Resize + CenterCrop) - FixRes'}\n"
-        if batch_size:
-            msg += f"   Batch Size: {batch_size}\n"
-        msg += f"{'='*60}"
-        print(msg)
+            # Log the change
+            msg = f"\n{'='*60}\n"
+            msg += f"📐 Resolution Schedule - Epoch {current_epoch}\n"
+            msg += f"   Resolution: {size}x{size}px\n"
+            msg += f"   Augmentation: {'Train (RandomResizedCrop + Flip)' if use_train_augs else 'Test (Resize + CenterCrop) - FixRes'}\n"
+            if batch_size:
+                msg += f"   Batch Size: {batch_size}\n"
+            msg += f"{'='*60}"
+            print(msg)
 
-        # Update the datamodule's parameters
-        if hasattr(trainer, 'datamodule') and trainer.datamodule is not None:
-            trainer.datamodule.update_resolution(size, use_train_augs, batch_size)
-            
-            # Force recreation of dataloaders with new transforms
-            # This is necessary for Lightning to pick up the changes
-            self._reset_dataloaders(trainer)
-            
-            self._last_applied_epoch = current_epoch
-        else:
-            raise RuntimeError("No datamodule found in trainer. Make sure you're using ImageNetDataModule.")
+            # Update the datamodule's parameters
+            if hasattr(trainer, 'datamodule') and trainer.datamodule is not None:
+                trainer.datamodule.update_resolution(size, use_train_augs, batch_size)
+                
+                # Force recreation of dataloaders with new transforms
+                # This is necessary for Lightning to pick up the changes
+                self._reset_dataloaders(trainer)
+                
+                self._last_applied_epoch = current_epoch
+            else:
+                raise RuntimeError("No datamodule found in trainer. Make sure you're using ImageNetDataModule.")
     
     def _reset_dataloaders(self, trainer: L.Trainer):
         """

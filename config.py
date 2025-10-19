@@ -43,7 +43,7 @@ onecycle_kwargs = {
             'final_div_factor': 1000.0
         }
 
-epochs = 50
+epochs = 10
 batch_size = 128
 dynamic_batch_size = True
 
@@ -51,25 +51,15 @@ dynamic_batch_size = True
 # Format: {epoch: (resolution, use_train_augs, batch_size)}
 # Set to None for No schedule, uses default 224px throughout the training
 prog_resizing_fixres_schedule = {
-    0: (128, True, 512),    # Epochs 0-9: 128px, train augs, BS=512
-    10: (224, True, 320),   # Epochs 10-84: 224px, train augs, BS=320
-    85: (288, False, 256),  # Epochs 85-90: 288px, test augs (FixRes), BS=256
+    # 0: (128, True, 512),    # Epochs 0-9: 128px, train augs, BS=512
+    # 10: (224, True, 320),   # Epochs 10-84: 224px, train augs, BS=320
+    # 85: (288, False, 256),  # Epochs 85-90: 288px, test augs (FixRes), BS=256
+    0: (128, True, 128),  # 280 * 4 = 1120  
+    4: (224, True, 64),   # 559 * 4 = 2236
+    8: (288, False, 32),  # 1118 * 2 = 2236
 }
 
-dataset_size = 1281167 # Update this to the correct size
-
-# Import utility functions
-from utils import get_total_num_steps, get_batch_size_from_resolution_schedule
-
-# Extract batch sizes from resolution schedule if using dynamic batch sizing
-if dynamic_batch_size and prog_resizing_fixres_schedule:
-    batch_size_schedule = get_batch_size_from_resolution_schedule(prog_resizing_fixres_schedule, epochs)
-else:
-    # Fallback to old-style schedule or None
-    batch_size_schedule = None
-
-# Calculate total steps for OneCycleLR scheduler
-total_steps = get_total_num_steps(dataset_size, batch_size, batch_size_schedule, epochs, dynamic_batch_size)
+dataset_size = 35746 # Update this to the correct size
 
 ### Example
 # Assumes batch_size=128 for all 90 epochs
@@ -79,4 +69,4 @@ total_steps = get_total_num_steps(dataset_size, batch_size, batch_size_schedule,
 # Epochs 10-84: BS=320 → 75 * (1281167 // 320) = 75 * 4004 = 300,300 steps  
 # Epochs 85-89: BS=256 → 5 * (1281167 // 256) = 5 * 5005 = 25,025 steps
 # Total: 25,020 + 300,300 + 25,025 = 350,345 steps
-# That's a huge difference (900K vs 350K steps)! 
+# This is a significant reduction in the number of steps required for training, which is a major benefit of using dynamic batch sizing and resolution schedule.
