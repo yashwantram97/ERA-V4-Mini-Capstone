@@ -19,6 +19,7 @@ project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
 import torch
+import torch.nn.functional as F
 import numpy as np
 import matplotlib.pyplot as plt
 from pathlib import Path
@@ -470,6 +471,273 @@ def test_fixres():
     return True
 
 # ============================================================================
+# TEST 6: MixUp Verification
+# ============================================================================
+def test_mixup():
+    """Verify MixUp augmentation is working correctly"""
+    print("\n" + "="*80)
+    print("TEST 6: MIXUP VERIFICATION")
+    print("="*80)
+    
+    print(f"\n📚 MixUp Concept:")
+    print(f"   - MixUp mixes pairs of training samples and their labels")
+    print(f"   - Creates synthetic training examples by linear interpolation")
+    print(f"   - Helps with regularization and generalization")
+    print(f"   - Formula: mixed_image = λ * image_a + (1-λ) * image_b")
+    print(f"   - λ is sampled from Beta(alpha, alpha) distribution")
+    
+    # Test 1: MixUp initialization with enabled config
+    print(f"\n🔧 TEST 6.1: MixUp Initialization (Enabled)")
+    print("="*60)
+    
+    mixup_kwargs_enabled = {
+        'mixup_alpha': 0.2,
+        'cutmix_alpha': 0.0,
+        'prob': 1.0,
+        'mode': 'batch',
+        'label_smoothing': 0.1,
+    }
+    
+    model_with_mixup = ResnetLightningModule(
+        learning_rate=LEARNING_RATE,
+        weight_decay=WEIGHT_DECAY,
+        num_classes=NUM_CLASSES,
+        mixup_kwargs=mixup_kwargs_enabled
+    )
+    
+    if model_with_mixup.mixup_fn is not None:
+        print(f"   ✅ MixUp enabled successfully")
+        print(f"   MixUp alpha: {mixup_kwargs_enabled['mixup_alpha']}")
+        print(f"   Probability: {mixup_kwargs_enabled['prob']}")
+        print(f"   Mode: {mixup_kwargs_enabled['mode']}")
+    else:
+        print(f"   ❌ MixUp initialization failed!")
+        return False
+    
+    # Test 2: MixUp initialization with disabled config
+    print(f"\n🔧 TEST 6.2: MixUp Initialization (Disabled)")
+    print("="*60)
+    
+    mixup_kwargs_disabled = {
+        'mixup_alpha': 0.0,  # Disabled
+    }
+    
+    model_without_mixup = ResnetLightningModule(
+        learning_rate=LEARNING_RATE,
+        weight_decay=WEIGHT_DECAY,
+        num_classes=NUM_CLASSES,
+        mixup_kwargs=mixup_kwargs_disabled
+    )
+    
+    if model_without_mixup.mixup_fn is None:
+        print(f"   ✅ MixUp correctly disabled when alpha=0")
+    else:
+        print(f"   ❌ MixUp should be disabled when alpha=0!")
+    
+    # Test 3: MixUp with None kwargs
+    print(f"\n🔧 TEST 6.3: MixUp with None kwargs")
+    print("="*60)
+    
+    model_no_kwargs = ResnetLightningModule(
+        learning_rate=LEARNING_RATE,
+        weight_decay=WEIGHT_DECAY,
+        num_classes=NUM_CLASSES,
+        mixup_kwargs=None
+    )
+    
+    if model_no_kwargs.mixup_fn is None:
+        print(f"   ✅ MixUp correctly disabled when kwargs=None")
+    else:
+        print(f"   ❌ MixUp should be disabled when kwargs=None!")
+    
+    # Test 4: MixUp transformation on actual data
+    print(f"\n🔧 TEST 6.4: MixUp Transformation on Data")
+    print("="*60)
+    
+    # Create sample batch
+    batch_size = 8
+    sample_images = torch.randn(batch_size, 3, 224, 224)
+    sample_labels = torch.randint(0, NUM_CLASSES, (batch_size,))
+    
+    print(f"\n   Original batch:")
+    print(f"      Image shape: {sample_images.shape}")
+    print(f"      Label shape: {sample_labels.shape}")
+    print(f"      Label type: {sample_labels.dtype}")
+    print(f"      Sample labels: {sample_labels[:4].tolist()}")
+    
+    # Apply MixUp
+    mixed_images, mixed_labels = model_with_mixup.mixup_fn(sample_images, sample_labels)
+    
+    print(f"\n   After MixUp:")
+    print(f"      Image shape: {mixed_images.shape}")
+    print(f"      Label shape: {mixed_labels.shape}")
+    print(f"      Label type: {mixed_labels.dtype}")
+    
+    # Verify shapes
+    if mixed_images.shape == sample_images.shape:
+        print(f"   ✅ Mixed images have correct shape")
+    else:
+        print(f"   ❌ Mixed images shape mismatch!")
+        return False
+    
+    # Verify labels are now soft (one-hot encoded)
+    if mixed_labels.shape == (batch_size, NUM_CLASSES):
+        print(f"   ✅ Labels converted to soft labels (one-hot)")
+    else:
+        print(f"   ❌ Labels shape incorrect: expected ({batch_size}, {NUM_CLASSES}), got {mixed_labels.shape}")
+        return False
+    
+    # Verify labels sum to 1 (probability distribution)
+    label_sums = mixed_labels.sum(dim=1)
+    if torch.allclose(label_sums, torch.ones_like(label_sums), atol=1e-5):
+        print(f"   ✅ Soft labels sum to 1.0 (valid probability distribution)")
+    else:
+        print(f"   ❌ Soft labels don't sum to 1.0!")
+        print(f"      Sample sums: {label_sums[:4].tolist()}")
+        return False
+    
+    # Check that labels are actually mixed (not just one-hot)
+    # Count how many labels have non-zero values in more than one class
+    non_zero_per_sample = (mixed_labels > 0.01).sum(dim=1)
+    mixed_samples = (non_zero_per_sample > 1).sum().item()
+    
+    print(f"\n   📊 MixUp Statistics:")
+    print(f"      Samples with mixed labels: {mixed_samples}/{batch_size}")
+    print(f"      Average classes per sample: {non_zero_per_sample.float().mean():.2f}")
+    
+    if mixed_samples > 0:
+        print(f"   ✅ Labels are being mixed (not just one-hot)")
+        # Show example of a mixed label
+        mixed_idx = (non_zero_per_sample > 1).nonzero()[0].item()
+        non_zero_classes = (mixed_labels[mixed_idx] > 0.01).nonzero().squeeze()
+        print(f"\n   Example mixed label (sample {mixed_idx}):")
+        for cls_idx in non_zero_classes[:3]:  # Show up to 3 classes
+            cls_idx = cls_idx.item() if cls_idx.numel() > 0 else cls_idx
+            print(f"      Class {cls_idx}: {mixed_labels[mixed_idx, cls_idx]:.3f}")
+    else:
+        print(f"   ⚠️  No labels were mixed in this batch (could be random)")
+    
+    # Test 5: MixUp affects images
+    print(f"\n🔧 TEST 6.5: MixUp Image Mixing Verification")
+    print("="*60)
+    
+    # Create two distinct images
+    image_a = torch.ones(1, 3, 224, 224) * 0.0  # Black image
+    image_b = torch.ones(1, 3, 224, 224) * 1.0  # White image
+    
+    # Stack them
+    test_images = torch.cat([image_a, image_b], dim=0)
+    test_labels = torch.tensor([0, 1])
+    
+    # Apply MixUp multiple times and check for variation
+    print(f"   Testing MixUp randomness (10 iterations)...")
+    mixed_results = []
+    lambda_values = []
+    
+    for i in range(10):
+        mixed_imgs, mixed_lbls = model_with_mixup.mixup_fn(test_images.clone(), test_labels.clone())
+        # Get the mean pixel value of first image (should be between 0 and 1)
+        mean_val = mixed_imgs[0].mean().item()
+        mixed_results.append(mean_val)
+        # Estimate lambda from the mixed label
+        lambda_val = mixed_lbls[0].max().item()
+        lambda_values.append(lambda_val)
+    
+    # Check if we got different results
+    unique_results = len(set([round(x, 3) for x in mixed_results]))
+    
+    print(f"\n   📊 Randomness check:")
+    print(f"      Unique mean values: {unique_results}/10")
+    print(f"      Mean values range: [{min(mixed_results):.3f}, {max(mixed_results):.3f}]")
+    print(f"      Lambda range: [{min(lambda_values):.3f}, {max(lambda_values):.3f}]")
+    
+    if unique_results > 1:
+        print(f"   ✅ MixUp produces different results (randomness working)")
+    else:
+        print(f"   ⚠️  MixUp produces same results (may not be random)")
+    
+    # Test 6: Integration with training step
+    print(f"\n🔧 TEST 6.6: MixUp Integration in Training Step")
+    print("="*60)
+    
+    # Create a sample batch
+    batch_images = torch.randn(4, 3, 224, 224)
+    batch_labels = torch.randint(0, NUM_CLASSES, (4,))
+    
+    # Test with MixUp enabled
+    model_with_mixup.eval()  # Set to eval to avoid any other randomness
+    with torch.no_grad():
+        try:
+            # Simulate training step logic
+            if model_with_mixup.mixup_fn is not None:
+                mixed_images, mixed_labels = model_with_mixup.mixup_fn(batch_images, batch_labels)
+                logits = model_with_mixup(mixed_images)
+                loss = F.cross_entropy(logits, mixed_labels)
+                print(f"   ✅ Training step with MixUp successful")
+                print(f"      Loss: {loss.item():.4f}")
+                print(f"      Logits shape: {logits.shape}")
+            else:
+                print(f"   ❌ MixUp should be enabled!")
+                return False
+        except Exception as e:
+            print(f"   ❌ Error in training step with MixUp: {e}")
+            return False
+    
+    # Test without MixUp
+    model_without_mixup.eval()
+    with torch.no_grad():
+        try:
+            if model_without_mixup.mixup_fn is None:
+                logits = model_without_mixup(batch_images)
+                loss = F.cross_entropy(logits, batch_labels, label_smoothing=0.1)
+                print(f"   ✅ Training step without MixUp successful")
+                print(f"      Loss: {loss.item():.4f}")
+            else:
+                print(f"   ❌ MixUp should be disabled!")
+                return False
+        except Exception as e:
+            print(f"   ❌ Error in training step without MixUp: {e}")
+            return False
+    
+    # Test 7: Check configuration from config file
+    print(f"\n🔧 TEST 6.7: MixUp Configuration from Config")
+    print("="*60)
+    
+    print(f"\n   Current MixUp configuration:")
+    for key, value in MIXUP_KWARGS.items():
+        print(f"      {key}: {value}")
+    
+    # Verify reasonable values
+    checks = []
+    
+    if 0.0 <= MIXUP_KWARGS.get('mixup_alpha', 0.0) <= 1.0:
+        print(f"   ✅ mixup_alpha in valid range [0.0, 1.0]")
+        checks.append(True)
+    else:
+        print(f"   ❌ mixup_alpha out of range!")
+        checks.append(False)
+    
+    if 0.0 <= MIXUP_KWARGS.get('prob', 1.0) <= 1.0:
+        print(f"   ✅ prob in valid range [0.0, 1.0]")
+        checks.append(True)
+    else:
+        print(f"   ❌ prob out of range!")
+        checks.append(False)
+    
+    if MIXUP_KWARGS.get('mode', 'batch') in ['batch', 'pair', 'elem']:
+        print(f"   ✅ mode is valid")
+        checks.append(True)
+    else:
+        print(f"   ❌ mode is invalid!")
+        checks.append(False)
+    
+    if not all(checks):
+        return False
+    
+    print("\n✅ TEST 6 PASSED: MixUp is working correctly")
+    return True
+
+# ============================================================================
 # MAIN EXECUTION
 # ============================================================================
 def main():
@@ -515,6 +783,13 @@ def main():
     except Exception as e:
         print(f"\n❌ TEST 5 FAILED: {e}")
         results['fixres'] = False
+    
+    try:
+        # Test 6: MixUp
+        results['mixup'] = test_mixup()
+    except Exception as e:
+        print(f"\n❌ TEST 6 FAILED: {e}")
+        results['mixup'] = False
     
     # Print summary
     print("\n" + "="*80)

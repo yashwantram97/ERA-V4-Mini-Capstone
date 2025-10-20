@@ -39,7 +39,6 @@ from configs import get_config, list_configs, ConfigProfile
 def train_with_lightning(
     config: ConfigProfile,
     resume_from_checkpoint: str = None,
-    use_sam: bool = False,
 ):
     """
     Train ImageNet dataset on ResNet50 using PyTorch Lightning
@@ -47,7 +46,6 @@ def train_with_lightning(
     Args:
         config: ConfigProfile object with all training settings
         resume_from_checkpoint: Path to checkpoint to resume training from where it stopped
-        use_sam: Whether to use SAM optimizer
     """
     print("🌩️ Starting PyTorch Lightning Training")
     print("=" * 60)
@@ -91,7 +89,7 @@ def train_with_lightning(
         weight_decay=config.weight_decay,
         num_classes=config.num_classes,
         # total_steps=actual_total_steps,
-        use_sam=use_sam
+        mixup_kwargs=config.mixup_kwargs
     )
     
     # 3. Setup Callbacks
@@ -227,8 +225,8 @@ Examples:
   # Train on AWS g5.12xlarge
   python train.py --config g5
   
-  # Train on AWS p3.16xlarge with SAM optimizer
-  python train.py --config p3 --use-sam
+  # Train on AWS p3.16xlarge
+  python train.py --config p3
   
   # Custom learning rate
   python train.py --config g5 --lr 0.001
@@ -254,12 +252,6 @@ Examples:
         type=str,
         default=None,
         help='Path to checkpoint to resume training from'
-    )
-    
-    parser.add_argument(
-        '--use-sam',
-        action='store_true',
-        help='Use SAM optimizer instead of AdamW'
     )
     
     parser.add_argument(
@@ -301,8 +293,7 @@ Examples:
     # Start training
     train_with_lightning(
         config=config,
-        resume_from_checkpoint=args.resume,
-        use_sam=args.use_sam
+        resume_from_checkpoint=args.resume
     )
     
     print("\n🎯 To view training progress:")

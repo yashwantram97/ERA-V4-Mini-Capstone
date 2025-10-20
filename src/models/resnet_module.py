@@ -16,13 +16,12 @@ Benefits:
 """
 
 from src.utils.utils import serialize_transforms
-from pytorch_optimizer import SAM
 import lightning as L
 import torch
 import torch.nn.functional as F
 import torchmetrics
 import antialiased_cnns
-# import timm
+from timm.data.mixup import Mixup
 from config import scheduler_type
 import copy
 from torchinfo import summary
@@ -46,7 +45,7 @@ class ResnetLightningModule(L.LightningModule):
         num_classes: int = 100,
         train_transforms = None,
         # total_steps: int = None,
-        use_sam: bool = False
+        mixup_kwargs: dict = None
         ):
         super().__init__()
         # Store hyperparameters
@@ -56,8 +55,23 @@ class ResnetLightningModule(L.LightningModule):
         # self.total_steps = total_steps
         # Store transforms for hyperparameter logging
         self.train_transforms = train_transforms
-
-        self.use_sam = use_sam
+        
+        # Initialize MixUp if enabled
+        self.mixup_fn = None
+        if mixup_kwargs is not None and mixup_kwargs.get('mixup_alpha', 0.0) > 0:
+            self.mixup_fn = Mixup(
+                mixup_alpha=mixup_kwargs.get('mixup_alpha', 0.0),
+                cutmix_alpha=mixup_kwargs.get('cutmix_alpha', 0.0),
+                cutmix_minmax=mixup_kwargs.get('cutmix_minmax', None),
+                prob=mixup_kwargs.get('prob', 1.0),
+                switch_prob=mixup_kwargs.get('switch_prob', 0.5),
+                mode=mixup_kwargs.get('mode', 'batch'),
+                label_smoothing=mixup_kwargs.get('label_smoothing', 0.1),
+                num_classes=num_classes
+            )
+            print(f"✅ MixUp enabled with alpha={mixup_kwargs.get('mixup_alpha', 0.0)}")
+        else:
+            print("ℹ️  MixUp disabled (set mixup_alpha > 0 to enable)")
 
         # We'll create a custom dict to include serialized transforms
         hparams_dict = {
@@ -106,12 +120,31 @@ class ResnetLightningModule(L.LightningModule):
         """
         images, labels = batch
         
+        # Apply MixUp if enabled (before forward pass)
+        if self.mixup_fn is not None:
+            images, labels = self.mixup_fn(images, labels)
+        
         # Forward pass
         logits = self(images) # Automatically calls self.forward(images)
-        loss = F.cross_entropy(logits, labels, label_smoothing=0.1) # Added Label smoothing
         
-        # Update metrics (pass logits directly for top-k accuracy)
-        self.train_accuracy(logits, labels)
+        # Compute loss
+        # Note: When MixUp is enabled, labels are soft (one-hot encoded)
+        # F.cross_entropy handles both hard labels (class indices) and soft labels (probabilities)
+        if self.mixup_fn is not None:
+            # Soft labels from MixUp - no label smoothing needed (already done by Mixup)
+            loss = F.cross_entropy(logits, labels)
+        else:
+            # Hard labels - apply label smoothing
+            loss = F.cross_entropy(logits, labels, label_smoothing=0.1)
+        
+        # Update metrics (convert soft labels back to hard labels for accuracy calculation)
+        if self.mixup_fn is not None:
+            # For soft labels, take argmax to get predicted class
+            labels_for_metrics = labels.argmax(dim=1)
+        else:
+            labels_for_metrics = labels
+        
+        self.train_accuracy(logits, labels_for_metrics)
         
         # Log metrics - Lightning handles the logging automatically
         # Note: sync_dist=True ensures metrics are properly aggregated across all GPUs in DDP mode
@@ -150,18 +183,6 @@ class ResnetLightningModule(L.LightningModule):
         Returns:
             optimizer or dict with optimizer and scheduler
         """
-
-        # if self.use_sam:
-        #     # Use SAM optimizer
-        #     base_optimizer = torch.optim.SGD
-        #     optimizer = SAM(
-        #         self.model.parameters(),
-        #         base_optimizer=base_optimizer,
-        #         lr=self.learning_rate,
-        #         weight_decay=self.weight_decay,
-        #         momentum=0.9
-        #     )
-        # else:
         optimizer = torch.optim.SGD(
             self.model.parameters(),
             lr=self.learning_rate,
@@ -232,35 +253,6 @@ class ResnetLightningModule(L.LightningModule):
                 "interval": "epoch"
             }
         }
-
-    def optimizer_step(self, epoch, batch_idx, optimizer, optimizer_closure):
-        """
-        Override optimizer step to support SAM's two-step optimization.
-        
-        This method is called by Lightning instead of optimizer.step().
-        For SAM, we need to:
-        1. First step: compute gradients and take ascent step
-        2. Second step: recompute gradients and take descent step
-        """
-        # Lightning wraps optimizers in LightningOptimizer
-        # Access the actual optimizer
-        actual_optimizer = optimizer.optimizer if hasattr(optimizer, 'optimizer') else optimizer
-
-        # Check if we're using SAM optimizer
-        if isinstance(actual_optimizer, SAM):
-            # SAM's two-step optimization
-            # Step 1: Ascent step (move to adversarial parameters)
-            actual_optimizer.first_step(zero_grad=True)
-            
-            # Step 2: Re-compute loss and gradients at adversarial parameters
-            # Lightning will handle the closure call for us
-            optimizer_closure()
-            
-            # Step 3: Descent step (update actual parameters)
-            actual_optimizer.second_step(zero_grad=True)
-        else:
-            # Standard optimizer step for non-SAM optimizers
-            optimizer.step(closure=optimizer_closure)
 
     @rank_zero_only
     def on_train_start(self):

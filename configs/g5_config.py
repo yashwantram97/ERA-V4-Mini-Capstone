@@ -56,11 +56,11 @@ NUM_WORKERS = 12  # 3 workers per GPU (4 GPUs) = 12 total
 PRECISION = "16-mixed"  # A10G benefits from mixed precision
 
 # Progressive Resizing + FixRes Schedule
-# Optimized for 4x A10G GPUs
+# Optimized for 60 epochs on 4x A10G GPUs
 PROG_RESIZING_FIXRES_SCHEDULE = {
-    0: (128, True),    # Epochs 0-9: 128px, train augs
-    10: (224, True),   # Epochs 10-84: 224px, train augs
-    85: (288, False),  # Epochs 85-89: 288px, test augs (FixRes)
+    0: (128, True),    # Epochs 0-9: 128px, train augs (17% - fast initial learning)
+    10: (224, True),   # Epochs 10-49: 224px, train augs (67% - main training phase)
+    50: (288, False),  # Epochs 50-59: 288px, test augs (17% - FixRes fine-tuning)
 }
 
 # Early stopping - more patience for full training
@@ -100,7 +100,18 @@ ONECYCLE_KWARGS = {
     'final_div_factor': 1000.0
 }
 
+# MixUp/CutMix settings (timm implementation)
+MIXUP_KWARGS = {
+    'mixup_alpha': 0.2,      # MixUp alpha (0.0 = disabled, 0.2-1.0 recommended)
+    'cutmix_alpha': 0.0,     # CutMix alpha (0.0 = disabled)
+    'cutmix_minmax': None,   # CutMix min/max ratio
+    'prob': 1.0,             # Probability of applying mixup/cutmix
+    'switch_prob': 0.5,      # Probability of switching to cutmix when both enabled
+    'mode': 'batch',         # How to apply mixup/cutmix ('batch', 'pair', 'elem')
+    'label_smoothing': 0.1,  # Label smoothing (matches training_step)
+}
+
 # Note: Excellent balance of cost and performance
-# Expected training time: ~4-6 hours for 90 epochs
-# Cost: ~$5-10 per full training run
+# Expected training time: ~3-4 hours for 60 epochs
+# Cost: ~$3-7 per training run
 

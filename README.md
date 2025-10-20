@@ -32,7 +32,6 @@ This project supports two dataset variants:
 3. **Label Smoothing** - Prevents overconfident predictions (+0.5-1% accuracy)
 4. **Progressive Resizing** - 128px → 224px → 288px (30-40% faster training)
 5. **MixUp** - Data augmentation through linear interpolation (+1-2% accuracy)
-6. **SAM** - Sharpness Aware Minimization optimizer (+1-2% accuracy)
 
 ### Additional Optimizations
 - **Channels Last Memory Format** - 10-30% faster on modern GPUs
@@ -145,10 +144,9 @@ python train.py --config g5     # For AWS g5.12xlarge
 python train.py --config p3      # For AWS p3.16xlarge
 
 # Advanced options
-python train.py --config g5 --use-sam                    # Use SAM optimizer
 python train.py --config g5 --lr 0.001                   # Custom learning rate
 python train.py --config p3 --resume path/to/last.ckpt   # Resume training
-python train.py --config p3 --lr 0.005 --use-sam         # Combine options
+python train.py --config p3 --lr 0.005                   # Combine options
 
 # Find optimal learning rate
 python find_lr.py --config local
@@ -222,8 +220,7 @@ jupyter notebook notebook-p3.16xlarge.ipynb
 2. Touvron, H., et al. (2019). [Fixing the train-test resolution discrepancy](https://arxiv.org/abs/1906.06423). NeurIPS.
 3. Szegedy, C., et al. (2016). [Rethinking the Inception Architecture](https://arxiv.org/abs/1512.00567). CVPR.
 4. Zhang, H., et al. (2017). [mixup: Beyond Empirical Risk Minimization](https://arxiv.org/abs/1710.09412). ICLR.
-5. Foret, P., et al. (2020). [Sharpness-Aware Minimization](https://arxiv.org/abs/2010.01412). ICLR.
-6. Howard, J., & Gugger, S. (2020). Deep Learning for Coders with fastai and PyTorch. O'Reilly.
+5. Howard, J., & Gugger, S. (2020). Deep Learning for Coders with fastai and PyTorch. O'Reilly.
 
 ## 🎓 Learning Resources
 
