@@ -3,6 +3,7 @@ import lightning as L
 from torch.utils.data import DataLoader
 from src.utils.utils import get_transforms
 from src.data_modules.imagenet_dataset import ImageNetDataset
+from lightning.pytorch.utilities import rank_zero_only
 
 class ImageNetDataModule(L.LightningDataModule):
     """
@@ -62,28 +63,23 @@ class ImageNetDataModule(L.LightningDataModule):
         self.train_dataset = None
         self.val_dataset = None
 
-    def update_resolution(self, resolution: int, use_train_augs: bool, batch_size: int = None):
+    def update_resolution(self, resolution: int, use_train_augs: bool):
         """
-        Update resolution, augmentation type, and optionally batch size.
+        Update resolution and augmentation type.
         Called by ResolutionScheduleCallback during training.
+        Note: This must run on all ranks to update datasets on each GPU.
         
         Args:
             resolution: New image resolution (e.g., 128, 224, 288)
             use_train_augs: True for train augmentations, False for test augmentations (FixRes)
-            batch_size: New batch size (optional, None keeps current batch size)
         """
         self.resolution = resolution
         self.use_train_augs = use_train_augs
         
-        if batch_size is not None:
-            self.batch_size = batch_size
-        
-        # Recreate datasets with new transforms
+        # Recreate datasets with new transforms (must happen on all ranks)
         self.setup(stage='fit')
-        
-        print(f"✅ DataModule updated: {resolution}x{resolution}px, "
-              f"{'Train' if use_train_augs else 'Test'} augs, BS={self.batch_size}")
 
+    @rank_zero_only
     def prepare_data(self):
         """
         Called once to prepare data (download, etc.)
@@ -128,12 +124,19 @@ class ImageNetDataModule(L.LightningDataModule):
                 transform=valid_transforms
             )
 
-        # Print dataset splits - only print what exists
+        # Print dataset splits - only print what exists (only on rank 0 to avoid spam in DDP)
         if hasattr(self, 'train_dataset') and self.train_dataset is not None:
-            aug_type = "Train" if self.use_train_augs else "Test (FixRes)"
-            print(f"📊 Dataset @ {self.resolution}x{self.resolution}px:")
-            print(f"   Train: {len(self.train_dataset)} samples ({aug_type} augmentation)")
-            print(f"   Val:   {len(self.val_dataset)} samples (Test augmentation)")
+            # Use a helper function to check if we're in a DDP context
+            # In DDP, self.trainer is available and we can check is_global_zero
+            should_print = True
+            if hasattr(self, 'trainer') and self.trainer is not None:
+                should_print = self.trainer.is_global_zero
+            
+            if should_print:
+                aug_type = "Train" if self.use_train_augs else "Test (FixRes)"
+                print(f"📊 Dataset @ {self.resolution}x{self.resolution}px:")
+                print(f"   Train: {len(self.train_dataset)} samples ({aug_type} augmentation)")
+                print(f"   Val:   {len(self.val_dataset)} samples (Test augmentation)")
 
     def train_dataloader(self):
         """Return training dataloader"""

@@ -36,7 +36,6 @@ This project supports two dataset variants:
 
 ### Additional Optimizations
 - **Channels Last Memory Format** - 10-30% faster on modern GPUs
-- **Dynamic Batch Sizing** - Optimizes GPU utilization across resolutions
 - **Multi-GPU Support** - Distributed training with PyTorch Lightning
 
 ## 📈 Performance Metrics

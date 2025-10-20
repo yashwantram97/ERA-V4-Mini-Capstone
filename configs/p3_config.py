@@ -36,7 +36,6 @@ EXPERIMENT_NAME = "imagenet_p3_training"
 # Training settings
 EPOCHS = 90
 BATCH_SIZE = 256  # Per GPU: 256, Total effective: 256 * 8 = 2048
-DYNAMIC_BATCH_SIZE = True
 
 # DataLoader settings - maximize data throughput
 NUM_WORKERS = 16  # 2 workers per GPU (8 GPUs) = 16 total
@@ -48,9 +47,9 @@ PRECISION = "16-mixed"  # V100 has excellent Tensor Core support
 # Progressive Resizing + FixRes Schedule
 # Aggressive schedule for fast training on 8 V100s
 PROG_RESIZING_FIXRES_SCHEDULE = {
-    0: (128, True, 768),    # Epochs 0-9: 128px, train augs, BS=768 (96 per GPU)
-    10: (224, True, 512),   # Epochs 10-84: 224px, train augs, BS=512 (64 per GPU)
-    85: (288, False, 384),  # Epochs 85-89: 288px, test augs (FixRes), BS=384 (48 per GPU)
+    0: (128, True),    # Epochs 0-9: 128px, train augs
+    10: (224, True),   # Epochs 10-84: 224px, train augs
+    85: (288, False),  # Epochs 85-89: 288px, test augs (FixRes)
 }
 
 # Early stopping - more patience for full training

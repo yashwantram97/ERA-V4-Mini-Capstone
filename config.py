@@ -38,7 +38,6 @@ lr_finder_kwargs = _default_config.lr_finder_kwargs
 onecycle_kwargs = _default_config.onecycle_kwargs
 epochs = _default_config.epochs
 batch_size = _default_config.batch_size
-dynamic_batch_size = _default_config.dynamic_batch_size
 prog_resizing_fixres_schedule = _default_config.prog_resizing_fixres_schedule
 dataset_size = _default_config.dataset_size
 num_workers = _default_config.num_workers

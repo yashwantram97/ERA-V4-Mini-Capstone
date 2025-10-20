@@ -7,9 +7,11 @@ Features:
 - Structured logging
 - Multiple log files (training.log, metrics.json, model_info.txt)
 - Proper logging levels and formatters
+- DDP-safe with rank_zero_only decorators for file operations
 """
 
 from lightning.pytorch.callbacks import Callback
+from lightning.pytorch.utilities import rank_zero_only
 import json
 import logging
 import time
@@ -88,8 +90,9 @@ class TextLoggingCallback(Callback):
             return f"{value:{format_spec}}"
         return default
 
+    @rank_zero_only
     def on_train_start(self, trainer, pl_module):
-        """Log training start with detailed information"""
+        """Log training start with detailed information (only on rank 0 to avoid log duplication)"""
         self.start_time = datetime.now()
         self.experiment_start_time = time.time()
 
@@ -133,8 +136,9 @@ class TextLoggingCallback(Callback):
         # Also save detailed model info to separate file
         self._save_model_info_to_file(pl_module, total_params, trainable_params)
 
+    @rank_zero_only
     def _save_model_info_to_file(self, pl_module, total_params, trainable_params):
-        """Save detailed model info to separate file"""
+        """Save detailed model info to separate file (only on rank 0 to avoid conflicts in DDP)"""
         with open(self.model_info_file, 'w') as f:
             f.write("="*80 + "\n")
             f.write("LIGHTNING MODEL INFORMATION\n")
@@ -280,12 +284,14 @@ class TextLoggingCallback(Callback):
         except Exception as e:
             self.logger.debug(f"Could not log dataset info: {e}")
 
+    @rank_zero_only
     def on_train_epoch_start(self, trainer, pl_module):
-        """Log epoch start"""
+        """Log epoch start (only on rank 0 to avoid log duplication)"""
         self.logger.info(f"🔄 EPOCH {trainer.current_epoch + 1}/{trainer.max_epochs} - Starting...")
 
+    @rank_zero_only
     def on_train_epoch_end(self, trainer, pl_module):
-        """Log training epoch results with detailed formatting"""
+        """Log training epoch results with detailed formatting (only on rank 0 to avoid log duplication)"""
         train_metrics = self._extract_metrics(trainer, pl_module, 'train')
         
         # Format metrics nicely
@@ -310,8 +316,9 @@ class TextLoggingCallback(Callback):
             'timestamp': datetime.now().isoformat()
         })
 
+    @rank_zero_only
     def on_validation_epoch_end(self, trainer, pl_module):
-        """Log validation epoch results"""
+        """Log validation epoch results (only on rank 0 to avoid log duplication)"""
         val_metrics = self._extract_metrics(trainer, pl_module, 'val')
         
         # Format metrics nicely
@@ -336,8 +343,9 @@ class TextLoggingCallback(Callback):
             'timestamp': datetime.now().isoformat()
         })
 
+    @rank_zero_only
     def on_test_epoch_end(self, trainer, pl_module):
-        """Log test results"""
+        """Log test results (only on rank 0 to avoid log duplication)"""
         test_metrics = self._extract_metrics(trainer, pl_module, 'test')
         
         self.logger.info("=" * 50)
@@ -368,8 +376,9 @@ class TextLoggingCallback(Callback):
             'timestamp': datetime.now().isoformat()
         })
     
+    @rank_zero_only
     def on_train_end(self, trainer, pl_module):
-        """Log training completion and save metrics (matching original style)"""
+        """Log training completion and save metrics (only on rank 0 to avoid log duplication)"""
         end_time = datetime.now()
         duration = time.time() - self.experiment_start_time if self.experiment_start_time else 0
         
@@ -397,8 +406,9 @@ class TextLoggingCallback(Callback):
         self.logger.info(f"📊 Metrics JSON: {get_relative_path(self.metrics_json_file)}")
         self.logger.info(f"🔍 Model info: {get_relative_path(self.model_info_file)}")
     
+    @rank_zero_only
     def _save_metrics_to_json(self, duration_seconds):
-        """Save training metrics to JSON file (matching original function)"""
+        """Save training metrics to JSON file (only on rank 0 to avoid conflicts in DDP)"""
         # Prepare final metrics structure
         final_metrics = {}
         for entry in self.metrics_history:

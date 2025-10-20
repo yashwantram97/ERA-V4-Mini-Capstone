@@ -34,7 +34,6 @@ class ConfigProfile:
     experiment_name: str
     epochs: int
     batch_size: int
-    dynamic_batch_size: bool
     learning_rate: float
     weight_decay: float
     
@@ -75,7 +74,6 @@ class ConfigProfile:
             'experiment_name': self.experiment_name,
             'epochs': self.epochs,
             'batch_size': self.batch_size,
-            'dynamic_batch_size': self.dynamic_batch_size,
             'learning_rate': self.learning_rate,
             'weight_decay': self.weight_decay,
             'num_workers': self.num_workers,
@@ -106,7 +104,6 @@ class ConfigProfile:
 ║   • Batch Size: {self.batch_size}
 ║   • Learning Rate: {self.learning_rate}
 ║   • Weight Decay: {self.weight_decay}
-║   • Dynamic Batch Size: {self.dynamic_batch_size}
 ║
 ║ Hardware Settings:
 ║   • Workers: {self.num_workers}
@@ -182,7 +179,6 @@ def get_config(profile_name: str = 'local') -> ConfigProfile:
         experiment_name=getattr(module, 'EXPERIMENT_NAME'),
         epochs=getattr(module, 'EPOCHS'),
         batch_size=getattr(module, 'BATCH_SIZE'),
-        dynamic_batch_size=getattr(module, 'DYNAMIC_BATCH_SIZE'),
         learning_rate=getattr(module, 'LEARNING_RATE'),
         weight_decay=getattr(module, 'WEIGHT_DECAY'),
         num_workers=getattr(module, 'NUM_WORKERS'),
