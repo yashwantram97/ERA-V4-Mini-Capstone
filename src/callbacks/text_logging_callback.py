@@ -290,7 +290,14 @@ class TextLoggingCallback(Callback):
         
         # Format metrics nicely
         loss_str = self._format_metric(train_metrics.get('loss'), ".4f")
-        acc_str = self._format_metric(train_metrics.get('accuracy'), ".4f")
+        # Display accuracy as percentage
+        acc = train_metrics.get('accuracy')
+        if isinstance(acc, (int, float, torch.Tensor)):
+            if isinstance(acc, torch.Tensor):
+                acc = acc.item()
+            acc_str = f"{acc * 100:.2f}%"
+        else:
+            acc_str = "N/A"
         f1_str = self._format_metric(train_metrics.get('f1_score'), ".3f")
         
         self.logger.info(f"📈 EPOCH {trainer.current_epoch + 1} TRAIN - Loss: {loss_str}, Acc: {acc_str}, F1: {f1_str}")
@@ -309,7 +316,14 @@ class TextLoggingCallback(Callback):
         
         # Format metrics nicely
         loss_str = self._format_metric(val_metrics.get('loss'), ".4f")
-        acc_str = self._format_metric(val_metrics.get('accuracy'), ".4f")
+        # Display accuracy as percentage
+        acc = val_metrics.get('accuracy')
+        if isinstance(acc, (int, float, torch.Tensor)):
+            if isinstance(acc, torch.Tensor):
+                acc = acc.item()
+            acc_str = f"{acc * 100:.2f}%"
+        else:
+            acc_str = "N/A"
         f1_str = self._format_metric(val_metrics.get('f1_score'), ".3f")
         
         self.logger.info(f"📊 EPOCH {trainer.current_epoch + 1} VAL   - Loss: {loss_str}, Acc: {acc_str}, F1: {f1_str}")
@@ -332,7 +346,16 @@ class TextLoggingCallback(Callback):
         
         # Log all test metrics
         for metric_name, value in test_metrics.items():
-            formatted_value = self._format_metric(value, ".4f" if 'loss' in metric_name else ".3f")
+            # Display accuracy as percentage
+            if 'accuracy' in metric_name.lower():
+                if isinstance(value, (int, float, torch.Tensor)):
+                    if isinstance(value, torch.Tensor):
+                        value = value.item()
+                    formatted_value = f"{value * 100:.2f}%"
+                else:
+                    formatted_value = "N/A"
+            else:
+                formatted_value = self._format_metric(value, ".4f" if 'loss' in metric_name else ".3f")
             self.logger.info(f"   Test {metric_name.title()}: {formatted_value}")
         
         self.logger.info("=" * 50)

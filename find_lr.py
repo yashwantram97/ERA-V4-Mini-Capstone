@@ -69,7 +69,7 @@ def main():
     print(config)
     
     # Setup transforms
-    train_transforms = get_transforms(transform_type="valid", mean=config.mean, std=config.std)
+    train_transforms = get_transforms(transform_type="train", mean=config.mean, std=config.std)
 
     # Setup data module
     imagenet_dm = ImageNetDataModule(
@@ -108,6 +108,7 @@ def main():
     print("\n🔍 Starting LR Finder...")
     print(f"   Range: {config.lr_finder_kwargs['start_lr']:.2e} to {config.lr_finder_kwargs['end_lr']:.2e}")
     print(f"   Iterations: {config.lr_finder_kwargs['num_iter']}")
+    print(f"   Number of classes: {config.num_classes}")
     
     suggested_lr = run_lr_finder(
         model,

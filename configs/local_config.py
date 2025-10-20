@@ -25,13 +25,13 @@ TRAIN_IMG_DIR = PROJECT_ROOT / "dataset" / "imagenet-mini" / "train"
 VAL_IMG_DIR = PROJECT_ROOT / "dataset" / "imagenet-mini" / "val"
 
 # Dataset settings
-DATASET_SIZE = 35746  # ImageNet-mini train size
+DATASET_SIZE = 130000  # ImageNet-mini train size
 
 # Experiment naming
 EXPERIMENT_NAME = "imagenet_local_dev"
 
 # Training settings
-EPOCHS = 10
+EPOCHS = 60
 BATCH_SIZE = 32  # Conservative for unified memory
 DYNAMIC_BATCH_SIZE = True
 
