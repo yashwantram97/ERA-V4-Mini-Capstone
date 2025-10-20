@@ -15,15 +15,12 @@ def get_transforms(transform_type="train", mean=None, std=None, resolution=224):
         resolution: Target image resolution (default 224)
     
     Returns:
-        List of Albumentations transforms
+        Albumentations Compose object with all transforms
     """
-    transforms = A.Compose([
-            A.Normalize(mean=mean, std=std),
-            ToTensorV2(),
-        ])
     IMAGENET_MEAN_VALUES = (int(mean[0] * 255), int(mean[1] * 255), int(mean[2] * 255))
+    
     if transform_type == "train":
-        transforms = [
+        transforms = A.Compose([
             A.RandomResizedCrop(
                 size=[resolution, resolution],
                 scale=[0.08, 1.0],  # Standard ImageNet range
@@ -36,20 +33,18 @@ def get_transforms(transform_type="train", mean=None, std=None, resolution=224):
                 A.HueSaturationValue(hue_shift_limit=10, sat_shift_limit=30, val_shift_limit=20, p=1.0)
             ], p=0.5),
             A.CoarseDropout(
-                max_holes=1,
-                max_height=int(resolution * 0.25),  # 25% of image height
-                max_width=int(resolution * 0.25),   # 25% of image width
-                min_holes=1,
-                min_height=int(resolution * 0.1),   # 10% of image height
-                min_width=int(resolution * 0.1),    # 10% of image width
+                num_holes_range=(1, 1),  # Number of holes to drop
+                hole_height_range=(int(resolution * 0.1), int(resolution * 0.25)),  # 10-25% of image height
+                hole_width_range=(int(resolution * 0.1), int(resolution * 0.25)),   # 10-25% of image width
                 fill=IMAGENET_MEAN_VALUES,  # ImageNet mean in RGB pixel values (0-255)
                 p=0.5
             ),
-        ]+ transforms
-
+            A.Normalize(mean=mean, std=std),
+            ToTensorV2(),
+        ])
     else:
         # Validation/Test transforms - FixRes compatible
-        transforms = [
+        transforms = A.Compose([
             A.Resize(
                 height=int(resolution * 256 / 224),  # Scale proportionally
                 width=int(resolution * 256 / 224),
@@ -60,8 +55,10 @@ def get_transforms(transform_type="train", mean=None, std=None, resolution=224):
                 height=resolution,
                 width=resolution,
                 p=1.0
-            )
-        ] + transforms
+            ),
+            A.Normalize(mean=mean, std=std),
+            ToTensorV2(),
+        ])
 
     return transforms
 

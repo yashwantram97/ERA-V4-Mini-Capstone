@@ -38,14 +38,8 @@ class ImageNetDataset(Dataset):
         
         # Apply Albumentations transforms
         if self.transform is not None:
-            # Albumentations expects a composition or list
-            if isinstance(self.transform, A.Compose):
-                transformed = self.transform(image=image)
-                image = transformed['image']
-            elif isinstance(self.transform, list):
-                # Create Compose on the fly if it's a list
-                compose = A.Compose(self.transform)
-                transformed = compose(image=image)
-                image = transformed['image']
+            # get_transforms() always returns A.Compose object
+            transformed = self.transform(image=image)
+            image = transformed['image']
         
         return image, label
