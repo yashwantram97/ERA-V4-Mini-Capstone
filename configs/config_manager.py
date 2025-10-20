@@ -131,7 +131,7 @@ def _load_config_module(profile_name: str):
     """Load configuration module by profile name."""
     config_map = {
         'local': 'configs.local_config',
-        'g5': 'configs.g5d_config',
+        'g5': 'configs.g5_config',
         'p3': 'configs.p3_config',
     }
     

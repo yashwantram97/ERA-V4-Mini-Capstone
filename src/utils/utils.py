@@ -21,31 +21,30 @@ def get_transforms(transform_type="train", mean=None, std=None, resolution=224):
             A.Normalize(mean=mean, std=std),
             ToTensorV2(),
         ])
+    IMAGENET_MEAN_VALUES = (int(mean[0] * 255), int(mean[1] * 255), int(mean[2] * 255))
     if transform_type == "train":
         transforms = [
             A.RandomResizedCrop(
                 size=[resolution, resolution],
-                scale=[0.5, 1],
+                scale=[0.08, 1.0],  # Standard ImageNet range
                 ratio=[0.75, 1.3333333333333333],
                 interpolation=cv2.INTER_LINEAR
             ),
             A.HorizontalFlip(p=0.5),
-            # A.ShiftScaleRotate(
-            #     shift_limit=(-0.0625, 0.0625),
-            #     scale_limit=(-0.1, 0.1),
-            #     rotate_limit=(-45, 45),
-            #     interpolation=cv2.INTER_LINEAR,
-            #     border_mode=cv2.BORDER_CONSTANT,
-            #     rotate_method="largest_box",
-            #     p=0.5
-            # ),
-            # A.CoarseDropout(
-            #     num_holes_range=(1, 1),
-            #     hole_height_range=(16, 16),
-            #     hole_width_range=(16, 16),
-            #     fill=mean,
-            #     p=0.5
-            # )
+            A.OneOf([
+                A.RandomBrightnessContrast(brightness_limit=0.2, contrast_limit=0.2, p=1.0),
+                A.HueSaturationValue(hue_shift_limit=10, sat_shift_limit=30, val_shift_limit=20, p=1.0)
+            ], p=0.5),
+            A.CoarseDropout(
+                max_holes=1,
+                max_height=int(resolution * 0.25),  # 25% of image height
+                max_width=int(resolution * 0.25),   # 25% of image width
+                min_holes=1,
+                min_height=int(resolution * 0.1),   # 10% of image height
+                min_width=int(resolution * 0.1),    # 10% of image width
+                fill=IMAGENET_MEAN_VALUES,  # ImageNet mean in RGB pixel values (0-255)
+                p=0.5
+            ),
         ]+ transforms
 
     else:
