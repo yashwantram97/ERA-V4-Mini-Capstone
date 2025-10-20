@@ -87,14 +87,14 @@ python train.py --config local
 # Train on AWS g5.12xlarge
 python train.py --config g5
 
-# Train on AWS p3.16xlarge with SAM optimizer
-python train.py --config p3 --use-sam
+# Train on AWS p3.16xlarge
+python train.py --config p3
 
 # Override learning rate (uses config value if not specified)
 python train.py --config g5 --lr 0.001
 
 # Combine multiple options
-python train.py --config p3 --lr 0.005 --use-sam
+python train.py --config p3 --lr 0.005
 
 # Resume from checkpoint
 python train.py --config g5 --resume logs/experiment/checkpoints/last.ckpt

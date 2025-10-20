@@ -45,7 +45,7 @@ STD = (0.229, 0.224, 0.225)
 EXPERIMENT_NAME = "imagenet_p3_training"
 
 # Training settings
-EPOCHS = 90
+EPOCHS = 60
 BATCH_SIZE = 256  # Per GPU: 256, Total effective: 256 * 8 = 2048
 LEARNING_RATE = 2.11e-3  # Found with LR finder
 WEIGHT_DECAY = 1e-4
@@ -59,11 +59,11 @@ NUM_WORKERS = 16  # 2 workers per GPU (8 GPUs) = 16 total
 PRECISION = "16-mixed"  # V100 has excellent Tensor Core support
 
 # Progressive Resizing + FixRes Schedule
-# Aggressive schedule for fast training on 8 V100s
+# Optimized for 60 epochs on 8x V100 GPUs
 PROG_RESIZING_FIXRES_SCHEDULE = {
-    0: (128, True),    # Epochs 0-9: 128px, train augs
-    10: (224, True),   # Epochs 10-84: 224px, train augs
-    85: (288, False),  # Epochs 85-89: 288px, test augs (FixRes)
+    0: (128, True),    # Epochs 0-9: 128px, train augs (17% - fast initial learning)
+    10: (224, True),   # Epochs 10-49: 224px, train augs (67% - main training phase)
+    50: (288, False),  # Epochs 50-59: 288px, test augs (17% - FixRes fine-tuning)
 }
 
 # Early stopping - more patience for full training
@@ -103,6 +103,17 @@ ONECYCLE_KWARGS = {
     'final_div_factor': 1000.0
 }
 
+# MixUp/CutMix settings (timm implementation)
+MIXUP_KWARGS = {
+    'mixup_alpha': 0.2,      # MixUp alpha (0.0 = disabled, 0.2-1.0 recommended)
+    'cutmix_alpha': 0.0,     # CutMix alpha (0.0 = disabled)
+    'cutmix_minmax': None,   # CutMix min/max ratio
+    'prob': 1.0,             # Probability of applying mixup/cutmix
+    'switch_prob': 0.5,      # Probability of switching to cutmix when both enabled
+    'mode': 'batch',         # How to apply mixup/cutmix ('batch', 'pair', 'elem')
+    'label_smoothing': 0.1,  # Label smoothing (matches training_step)
+}
+
 # Additional optimizations for p3.16xlarge
 # Set these in your training script:
 # - Use pin_memory=True in dataloaders (plenty of RAM)
@@ -110,7 +121,7 @@ ONECYCLE_KWARGS = {
 # - Monitor GPU utilization to ensure you're compute-bound
 
 # Note: Most powerful option, best for production training
-# Expected training time: ~2-3 hours for 90 epochs
-# Cost: ~$15-25 per full training run
+# Expected training time: ~7-8 hours for 60 epochs
+# Cost: ~$35-45 per training run
 # Recommended for: Final model training, hyperparameter sweeps
 

@@ -49,6 +49,7 @@ class ConfigProfile:
     strategy: Optional[str] = None
     onecycle_kwargs: Optional[Dict[str, Any]] = None
     lr_finder_kwargs: Optional[Dict[str, Any]] = None
+    mixup_kwargs: Optional[Dict[str, Any]] = None
     prog_resizing_fixres_schedule: Optional[Dict[int, tuple]] = None
     early_stopping_patience: int = 5
     save_top_k: int = 3
@@ -83,6 +84,7 @@ class ConfigProfile:
             'scheduler_type': self.scheduler_type,
             'onecycle_kwargs': self.onecycle_kwargs,
             'lr_finder_kwargs': self.lr_finder_kwargs,
+            'mixup_kwargs': self.mixup_kwargs,
             'prog_resizing_fixres_schedule': self.prog_resizing_fixres_schedule,
             'early_stopping_patience': self.early_stopping_patience,
             'save_top_k': self.save_top_k,
@@ -188,6 +190,7 @@ def get_config(profile_name: str = 'local') -> ConfigProfile:
         scheduler_type=getattr(module, 'SCHEDULER_TYPE'),
         onecycle_kwargs=getattr(module, 'ONECYCLE_KWARGS'),
         lr_finder_kwargs=getattr(module, 'LR_FINDER_KWARGS'),
+        mixup_kwargs=getattr(module, 'MIXUP_KWARGS', None),
         prog_resizing_fixres_schedule=getattr(module, 'PROG_RESIZING_FIXRES_SCHEDULE'),
         early_stopping_patience=getattr(module, 'EARLY_STOPPING_PATIENCE', 5),
         save_top_k=getattr(module, 'SAVE_TOP_K', 3),

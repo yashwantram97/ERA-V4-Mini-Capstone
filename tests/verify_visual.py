@@ -388,6 +388,238 @@ def visualize_blurpool():
     print(f"   MaxPool layers found: {len(maxpool_layers)}")
 
 # ============================================================================
+# 5. Visualize MixUp
+# ============================================================================
+def visualize_mixup():
+    """Visualize how MixUp mixes images and labels"""
+    print("\n" + "="*80)
+    print("5️⃣  VISUALIZING MIXUP")
+    print("="*80)
+    
+    from src.models.resnet_module import ResnetLightningModule
+    from timm.data.mixup import Mixup
+    
+    # Create model with MixUp enabled
+    mixup_kwargs = {
+        'mixup_alpha': 0.2,
+        'cutmix_alpha': 0.0,
+        'prob': 1.0,
+        'mode': 'batch',
+        'label_smoothing': 0.1,
+        'num_classes': NUM_CLASSES
+    }
+    
+    model = ResnetLightningModule(
+        learning_rate=LEARNING_RATE,
+        num_classes=NUM_CLASSES,
+        mixup_kwargs=mixup_kwargs
+    )
+    
+    if model.mixup_fn is None:
+        print("⚠️  MixUp is disabled. Skipping visualization.")
+        return
+    
+    # Load two sample images from different classes
+    class_dirs = list(TRAIN_IMG_DIR.glob("*"))[:2]  # Get first 2 classes
+    
+    if len(class_dirs) < 2:
+        print("⚠️  Need at least 2 classes in dataset. Skipping visualization.")
+        return
+    
+    # Get one image from each class
+    img1_path = list(class_dirs[0].glob("*.JPEG"))[0]
+    img2_path = list(class_dirs[1].glob("*.JPEG"))[0]
+    
+    print(f"\n📷 Loading sample images:")
+    print(f"   Image 1: {img1_path.parent.name}/{img1_path.name}")
+    print(f"   Image 2: {img2_path.parent.name}/{img2_path.name}")
+    
+    # Load and preprocess images
+    from src.utils.utils import get_transforms
+    
+    # Get transforms
+    transforms = get_transforms("train", MEAN, STD, 224)
+    
+    # Load images
+    img1 = Image.open(img1_path).convert('RGB')
+    img2 = Image.open(img2_path).convert('RGB')
+    
+    img1_np = np.array(img1)
+    img2_np = np.array(img2)
+    
+    # Apply transforms (without mixup)
+    compose = A.Compose(transforms)
+    img1_tensor = compose(image=img1_np)['image']
+    img2_tensor = compose(image=img2_np)['image']
+    
+    # Create batch
+    images_batch = torch.stack([img1_tensor, img2_tensor], dim=0)
+    labels_batch = torch.tensor([0, 1])  # Different labels
+    
+    # Apply MixUp with different lambda values
+    fig, axes = plt.subplots(3, 5, figsize=(20, 12))
+    fig.suptitle('MixUp Visualization - Mixing Two Images', fontsize=16, fontweight='bold')
+    
+    # Row 1: Original images
+    def denormalize(img_tensor):
+        """Denormalize image for visualization"""
+        img = img_tensor.permute(1, 2, 0).numpy()
+        img = img * np.array(STD) + np.array(MEAN)
+        img = np.clip(img, 0, 1)
+        return img
+    
+    axes[0, 0].imshow(denormalize(img1_tensor))
+    axes[0, 0].set_title('Image A\n(Class 0)', fontweight='bold')
+    axes[0, 0].axis('off')
+    
+    axes[0, 1].imshow(denormalize(img2_tensor))
+    axes[0, 1].set_title('Image B\n(Class 1)', fontweight='bold')
+    axes[0, 1].axis('off')
+    
+    # Hide remaining axes in first row
+    for i in range(2, 5):
+        axes[0, i].axis('off')
+    
+    # Row 2 & 3: MixUp with different lambda values (random from Beta distribution)
+    print(f"\n🎨 Generating MixUp examples...")
+    
+    for idx in range(10):
+        row = 1 + (idx // 5)
+        col = idx % 5
+        
+        # Apply MixUp
+        mixed_imgs, mixed_lbls = model.mixup_fn(images_batch.clone(), labels_batch.clone())
+        
+        # Get the mixed version of first image
+        mixed_img = denormalize(mixed_imgs[0])
+        
+        # Get lambda (mixing coefficient) from the label
+        lambda_val = mixed_lbls[0, 0].item()  # Proportion of class 0
+        
+        axes[row, col].imshow(mixed_img)
+        axes[row, col].set_title(f'λ={lambda_val:.2f}\n({lambda_val*100:.0f}% A, {(1-lambda_val)*100:.0f}% B)', 
+                                fontsize=10)
+        axes[row, col].axis('off')
+    
+    plt.tight_layout()
+    output_path = output_dir / "mixup_visualization.png"
+    plt.savefig(output_path, dpi=150, bbox_inches='tight')
+    print(f"\n✅ Saved MixUp visualization: {output_path}")
+    plt.close()
+    
+    # Create a second plot showing label mixing
+    fig, axes = plt.subplots(2, 5, figsize=(20, 8))
+    fig.suptitle('MixUp Label Mixing - Soft Labels', fontsize=16, fontweight='bold')
+    
+    print(f"\n📊 Generating label mixing examples...")
+    
+    # Create batch with multiple classes for visualization
+    num_samples = 10
+    sample_images = torch.randn(num_samples, 3, 224, 224)
+    sample_labels = torch.arange(num_samples) % NUM_CLASSES
+    
+    # Apply MixUp
+    mixed_imgs, mixed_lbls = model.mixup_fn(sample_images, sample_labels)
+    
+    for idx in range(10):
+        row = idx // 5
+        col = idx % 5
+        
+        # Get top 3 classes for this sample
+        top_probs, top_classes = torch.topk(mixed_lbls[idx], k=min(3, NUM_CLASSES))
+        
+        # Create bar chart
+        ax = axes[row, col]
+        bars = ax.bar(range(len(top_probs)), top_probs.numpy(), color='skyblue', edgecolor='black')
+        
+        # Color the bars
+        colors = ['#FF6B6B', '#4ECDC4', '#45B7D1']
+        for bar, color in zip(bars, colors):
+            bar.set_color(color)
+        
+        ax.set_xticks(range(len(top_probs)))
+        ax.set_xticklabels([f'C{c}' for c in top_classes.numpy()], fontsize=8)
+        ax.set_ylim(0, 1.0)
+        ax.set_ylabel('Probability', fontsize=8)
+        ax.set_title(f'Sample {idx+1}', fontsize=10, fontweight='bold')
+        ax.grid(axis='y', alpha=0.3)
+        
+        # Add value labels on bars
+        for bar, prob in zip(bars, top_probs):
+            height = bar.get_height()
+            ax.text(bar.get_x() + bar.get_width()/2., height,
+                   f'{prob:.2f}',
+                   ha='center', va='bottom', fontsize=8)
+    
+    plt.tight_layout()
+    output_path = output_dir / "mixup_labels.png"
+    plt.savefig(output_path, dpi=150, bbox_inches='tight')
+    print(f"✅ Saved MixUp label visualization: {output_path}")
+    plt.close()
+    
+    # Statistics plot
+    print(f"\n📈 Creating MixUp statistics plot...")
+    
+    fig, axes = plt.subplots(1, 2, figsize=(14, 6))
+    
+    # Generate many MixUp samples to show lambda distribution
+    num_iterations = 1000
+    lambda_values = []
+    
+    for _ in range(num_iterations):
+        test_imgs = torch.randn(2, 3, 224, 224)
+        test_lbls = torch.tensor([0, 1])
+        mixed_imgs, mixed_lbls = model.mixup_fn(test_imgs, test_lbls)
+        lambda_val = mixed_lbls[0, 0].item()
+        lambda_values.append(lambda_val)
+    
+    # Plot 1: Lambda distribution
+    axes[0].hist(lambda_values, bins=50, color='#3A86FF', alpha=0.7, edgecolor='black')
+    axes[0].set_xlabel('Lambda (λ)', fontsize=12, fontweight='bold')
+    axes[0].set_ylabel('Frequency', fontsize=12, fontweight='bold')
+    axes[0].set_title(f'MixUp Lambda Distribution\n(Beta({mixup_kwargs["mixup_alpha"]}, {mixup_kwargs["mixup_alpha"]}) over {num_iterations} samples)', 
+                     fontsize=14, fontweight='bold')
+    axes[0].grid(axis='y', alpha=0.3)
+    axes[0].axvline(0.5, color='red', linestyle='--', label='λ=0.5 (equal mix)')
+    axes[0].legend()
+    
+    # Plot 2: Statistics
+    lambda_array = np.array(lambda_values)
+    stats_text = f"""
+    MixUp Statistics:
+    
+    Alpha Parameter: {mixup_kwargs['mixup_alpha']}
+    
+    Lambda Statistics:
+    • Mean: {lambda_array.mean():.3f}
+    • Std Dev: {lambda_array.std():.3f}
+    • Min: {lambda_array.min():.3f}
+    • Max: {lambda_array.max():.3f}
+    • Median: {np.median(lambda_array):.3f}
+    
+    Configuration:
+    • Probability: {mixup_kwargs['prob']*100:.0f}%
+    • Mode: {mixup_kwargs['mode']}
+    • Label Smoothing: {mixup_kwargs['label_smoothing']}
+    """
+    
+    axes[1].text(0.1, 0.5, stats_text, transform=axes[1].transAxes,
+                fontsize=12, verticalalignment='center',
+                bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5),
+                family='monospace')
+    axes[1].axis('off')
+    
+    plt.tight_layout()
+    output_path = output_dir / "mixup_statistics.png"
+    plt.savefig(output_path, dpi=150, bbox_inches='tight')
+    print(f"✅ Saved MixUp statistics: {output_path}")
+    plt.close()
+    
+    print(f"\n✅ MixUp visualization complete!")
+    print(f"   Lambda mean: {lambda_array.mean():.3f} (should be ~0.5)")
+    print(f"   Lambda std: {lambda_array.std():.3f}")
+
+# ============================================================================
 # MAIN
 # ============================================================================
 def main():
@@ -413,6 +645,11 @@ def main():
     except Exception as e:
         print(f"❌ Error in BlurPool visualization: {e}")
     
+    try:
+        visualize_mixup()
+    except Exception as e:
+        print(f"❌ Error in MixUp visualization: {e}")
+    
     print("\n" + "="*80)
     print("✅ VISUAL VERIFICATION COMPLETE!")
     print("="*80)
@@ -421,6 +658,9 @@ def main():
     print(f"   - onecycle_schedule.png: LR and momentum over training")
     print(f"   - resolution_schedule.png: Progressive resizing timeline")
     print(f"   - blurpool_verification.png: BlurPool integration status")
+    print(f"   - mixup_visualization.png: See how MixUp mixes images")
+    print(f"   - mixup_labels.png: See soft label distributions")
+    print(f"   - mixup_statistics.png: Lambda distribution and statistics")
     print("\n💡 Review these plots to ensure everything is configured correctly!")
     print("="*80)
 
