@@ -74,9 +74,11 @@ class ResnetLightningModule(L.LightningModule):
         # Initialize model
         # self.model = torch.hub.load("pytorch/vision", "resnet50", weights=None)
         # Use antialiased_cnns for implementing Blur Pool
-        self.model = antialiased_cnns.resnet50(pretrained=False)
-        # Skip number of classes in prediction layer as resnet50 already has 1000 classes
-        # self.model.fc = torch.nn.Linear(self.model.fc.in_features, num_classes)
+        if self.num_classes == 100:
+            self.model = antialiased_cnns.resnet50(pretrained=False)
+            self.model.fc = torch.nn.Linear(self.model.fc.in_features, num_classes)
+        else:
+            self.model = antialiased_cnns.resnet50(pretrained=False)
         # Use channels_last memory format for faster training
         self.model = self.model.to(memory_format=torch.channels_last)
 
@@ -84,11 +86,7 @@ class ResnetLightningModule(L.LightningModule):
         # Why separate metrics? Each stage (train/val/test) needs independent tracking
         self.train_accuracy = torchmetrics.Accuracy(task="multiclass", num_classes=num_classes, top_k=1)
         
-        self.val_accuracy = torchmetrics.Accuracy(task="multiclass", num_classes=num_classes, top_k=1)
-        
-        # Add example input for model graph logging
-        self.example_input_array = torch.randn(1, 3, 224, 224)
-    
+        self.val_accuracy = torchmetrics.Accuracy(task="multiclass", num_classes=num_classes, top_k=1)            
     def forward(self, x):
         """Forward pass - just call the model"""
         return self.model(x)
