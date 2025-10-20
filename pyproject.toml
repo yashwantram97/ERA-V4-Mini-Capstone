@@ -21,4 +21,5 @@ dependencies = [
     "torchinfo>=1.8.0",
     "torchvision>=0.24.0",
     "tensorboard>=2.20.0",
+    "timm>=1.0.20"
 ]

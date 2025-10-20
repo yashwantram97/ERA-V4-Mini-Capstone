@@ -32,8 +32,7 @@ EXPERIMENT_NAME = "imagenet_local_dev"
 
 # Training settings
 EPOCHS = 60
-BATCH_SIZE = 32  # Conservative for unified memory
-DYNAMIC_BATCH_SIZE = True
+BATCH_SIZE = 64  # Optimized for M4 Pro MPS with mixed precision
 
 # DataLoader settings - fewer workers for M4 Pro
 NUM_WORKERS = 4  # M4 Pro has good CPU but shared with training
@@ -42,11 +41,11 @@ NUM_WORKERS = 4  # M4 Pro has good CPU but shared with training
 PRECISION = "16-mixed"  # Use mixed precision for speed
 
 # Progressive Resizing + FixRes Schedule
-# Conservative batch sizes for local development
+# Optimized for 60 epochs total
 PROG_RESIZING_FIXRES_SCHEDULE = {
-    0: (128, True, 64),   # Epochs 0-3: 128px, train augs, BS=64
-    4: (224, True, 32),   # Epochs 4-7: 224px, train augs, BS=32
-    8: (288, False, 16),  # Epochs 8-9: 288px, test augs (FixRes), BS=16
+    0: (128, True),   # Epochs 0-14: 128px, train augs (25% of training)
+    15: (224, True),   # Epochs 15-49: 224px, train augs (58% of training)
+    50: (288, False),  # Epochs 50-59: 288px, test augs (FixRes) (17% of training)
 }
 
 # Early stopping for faster iteration during development

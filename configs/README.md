@@ -140,7 +140,6 @@ Each configuration file contains:
 3. **Training Settings**
    - `EPOCHS`: Number of training epochs
    - `BATCH_SIZE`: Base batch size
-   - `DYNAMIC_BATCH_SIZE`: Whether to use dynamic batch sizing
    - `LEARNING_RATE`: Initial learning rate
    - `WEIGHT_DECAY`: Weight decay for optimizer
 
@@ -151,7 +150,7 @@ Each configuration file contains:
    - `STRATEGY`: Multi-GPU strategy (DDP, etc.)
 
 4. **Progressive Resizing Schedule**
-   - `PROG_RESIZING_FIXRES_SCHEDULE`: Dictionary mapping epochs to (resolution, use_train_augs, batch_size)
+   - `PROG_RESIZING_FIXRES_SCHEDULE`: Dictionary mapping epochs to (resolution, use_train_augs)
 
 5. **Callback Settings**
    - `EARLY_STOPPING_PATIENCE`: Patience for early stopping
@@ -182,9 +181,9 @@ NUM_WORKERS = 8
 PRECISION = "16-mixed"
 
 PROG_RESIZING_FIXRES_SCHEDULE = {
-    0: (128, True, 256),
-    20: (224, True, 128),
-    40: (288, False, 64),
+    0: (128, True),
+    20: (224, True),
+    40: (288, False),
 }
 ```
 
@@ -194,7 +193,7 @@ PROG_RESIZING_FIXRES_SCHEDULE = {
 - **Rule of thumb:** Use the largest batch size that fits in GPU memory
 - Start with suggested values and monitor GPU memory usage
 - Larger batch sizes = faster training but may affect convergence
-- Use dynamic batch sizing with progressive resizing for efficiency
+- Monitor GPU memory usage to optimize batch size
 
 ### Number of Workers
 - **Rule of thumb:** 2-4 workers per GPU
@@ -206,7 +205,7 @@ PROG_RESIZING_FIXRES_SCHEDULE = {
 - Start with small resolution (128px) for fast initial training
 - Gradually increase to target resolution (224px)
 - End with FixRes (288px with test-time augmentations)
-- Adjust batch sizes per stage to maintain GPU utilization
+- Fixed batch size is used throughout all stages
 
 ### Multi-GPU Training
 - Use DDP (Distributed Data Parallel) strategy

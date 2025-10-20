@@ -34,7 +34,6 @@ EXPERIMENT_NAME = "imagenet_g5d_training"
 # Training settings
 EPOCHS = 90
 BATCH_SIZE = 256  # Good starting point for A10G with 24GB
-DYNAMIC_BATCH_SIZE = True
 
 # DataLoader settings - plenty of CPU cores available
 NUM_WORKERS = 12  # 3 workers per GPU (4 GPUs) = 12 total
@@ -45,9 +44,9 @@ PRECISION = "16-mixed"  # A10G benefits from mixed precision
 # Progressive Resizing + FixRes Schedule
 # Optimized for 4x A10G GPUs
 PROG_RESIZING_FIXRES_SCHEDULE = {
-    0: (128, True, 512),    # Epochs 0-9: 128px, train augs, BS=512
-    10: (224, True, 320),   # Epochs 10-84: 224px, train augs, BS=320
-    85: (288, False, 256),  # Epochs 85-89: 288px, test augs (FixRes), BS=256
+    0: (128, True),    # Epochs 0-9: 128px, train augs
+    10: (224, True),   # Epochs 10-84: 224px, train augs
+    85: (288, False),  # Epochs 85-89: 288px, test augs (FixRes)
 }
 
 # Early stopping - more patience for full training

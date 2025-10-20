@@ -22,9 +22,11 @@ import torch
 import torch.nn.functional as F
 import torchmetrics
 import antialiased_cnns
+# import timm
 from config import scheduler_type
 import copy
 from torchinfo import summary
+from lightning.pytorch.utilities import rank_zero_only
 
 class ResnetLightningModule(L.LightningModule):
     """
@@ -43,7 +45,7 @@ class ResnetLightningModule(L.LightningModule):
         weight_decay: float = 1e-4,
         num_classes: int = 100,
         train_transforms = None,
-        total_steps: int = None,
+        # total_steps: int = None,
         use_sam: bool = False
         ):
         super().__init__()
@@ -51,7 +53,7 @@ class ResnetLightningModule(L.LightningModule):
         self.learning_rate = learning_rate
         self.weight_decay = weight_decay
         self.num_classes = num_classes
-        self.total_steps = total_steps
+        # self.total_steps = total_steps
         # Store transforms for hyperparameter logging
         self.train_transforms = train_transforms
 
@@ -112,9 +114,10 @@ class ResnetLightningModule(L.LightningModule):
         self.train_accuracy(logits, labels)
         
         # Log metrics - Lightning handles the logging automatically
-        # Note: Only log loss on_step for performance. Metrics synced only on_epoch to avoid DDP overhead
-        self.log('train/loss', loss, on_step=True, on_epoch=True, prog_bar=True)
-        self.log('train/accuracy', self.train_accuracy, on_step=False, on_epoch=True, prog_bar=True)
+        # Note: sync_dist=True ensures metrics are properly aggregated across all GPUs in DDP mode
+        # In single-GPU mode, sync_dist=True is a no-op (no performance penalty)
+        self.log('train/loss', loss, on_step=True, on_epoch=True, prog_bar=True, sync_dist=True)
+        self.log('train/accuracy', self.train_accuracy, on_step=False, on_epoch=True, prog_bar=True, sync_dist=True)
 
         return loss
 
@@ -135,9 +138,10 @@ class ResnetLightningModule(L.LightningModule):
         # Update metrics (pass logits directly for top-k accuracy)
         self.val_accuracy(logits, labels)
         
-        # Log metrics - only log on_epoch to avoid DDP sync overhead
-        self.log('val/loss', loss, on_step=False, on_epoch=True, prog_bar=True)
-        self.log('val/accuracy', self.val_accuracy, on_step=False, on_epoch=True, prog_bar=True)
+        # Log metrics - sync_dist=True aggregates metrics across GPUs
+        # In single-GPU mode, sync_dist=True is a no-op (no performance penalty)
+        self.log('val/loss', loss, on_step=False, on_epoch=True, prog_bar=True, sync_dist=True)
+        self.log('val/accuracy', self.val_accuracy, on_step=False, on_epoch=True, prog_bar=True, sync_dist=True)
 
     def configure_optimizers(self):
         """
@@ -166,12 +170,18 @@ class ResnetLightningModule(L.LightningModule):
             )
         
         if scheduler_type == 'one_cycle_policy':
+            # Calculate steps per epoch using Lightning's estimated_stepping_batches
+            # This is available during configure_optimizers and accounts for all training settings
+            total_steps = self.trainer.estimated_stepping_batches
+            steps_per_epoch = total_steps // self.trainer.max_epochs
+            
             # Create OneCycle scheduler with EXACT parameters
             # This was setup in notebook by running set up ocp function
             scheduler = torch.optim.lr_scheduler.OneCycleLR(
                 optimizer,
                 max_lr=self.learning_rate,        
-                total_steps=self.total_steps,
+                epochs=self.trainer.max_epochs,
+                steps_per_epoch=steps_per_epoch,
                 pct_start=0.2,          
                 anneal_strategy='cos',  
                 cycle_momentum=True,    
@@ -184,8 +194,11 @@ class ResnetLightningModule(L.LightningModule):
             print(f"🔄 Recreated OneCycleLR Scheduler:")
             print(f"   Max LR: {self.learning_rate:.4e}")
             print(f"   Initial LR: {self.learning_rate/100.0:.4e}")
-            print(f"   Total steps: {self.total_steps}")
-            print(f"   Steps per epoch: {704}")
+            print(f"   Total steps: {total_steps}")
+            print(f"   Steps per epoch: {steps_per_epoch}")
+            print(f"   Total epochs: {self.trainer.max_epochs}")
+            print(f"   Num devices: {self.trainer.num_devices}")
+            print(f"   Strategy: {self.trainer.strategy.__class__.__name__}")
             print(f"   Pct start: {0.2}")
             print(f"   Div factor: {100.0}")
             
@@ -249,8 +262,9 @@ class ResnetLightningModule(L.LightningModule):
             # Standard optimizer step for non-SAM optimizers
             optimizer.step(closure=optimizer_closure)
 
+    @rank_zero_only
     def on_train_start(self):
-        """Called at the start of training - log model graph"""
+        """Called at the start of training - log model graph (only on rank 0 to avoid duplication in DDP)"""
         # Log model architecture to TensorBoard
         if self.logger is None:
             return
@@ -300,24 +314,49 @@ class ResnetLightningModule(L.LightningModule):
         except Exception as e:
             print(f"❌ Error logging model info: {e}")
 
+    def on_train_epoch_start(self):
+        """Called at the start of each training epoch - log current learning rate"""
+        # Get current learning rate from optimizer
+        try:
+            # Get all optimizers (usually just one)
+            optimizers = self.optimizers()
+            if not isinstance(optimizers, list):
+                optimizers = [optimizers]
+            
+            # Get LR from first optimizer, first param group
+            current_lr = optimizers[0].param_groups[0]['lr']
+            
+            # Log to console (only rank 0 to avoid spam in DDP)
+            if self.trainer.is_global_zero:
+                print(f"\n📚 Epoch {self.current_epoch + 1}/{self.trainer.max_epochs} | Learning Rate: {current_lr:.6e}")
+            
+            # Log to TensorBoard (sync_dist not needed for LR as it's the same across all ranks)
+            self.log('train/learning_rate', current_lr, on_step=False, on_epoch=True, prog_bar=False)
+            
+        except Exception as e:
+            # If we can't get LR (e.g., before optimizer is created), skip silently
+            pass
+
     def on_train_epoch_end(self):
         """Called at the end of each training epoch"""
         # Get current metrics
         train_acc = self.train_accuracy.compute()
         
-        self.logger.experiment.add_text(
-            "Training/Epoch_Results", 
-            f"🚀 Epoch {self.current_epoch}: Train Acc: {train_acc:.3f}",
-            self.current_epoch
-        )
+        if self.logger is not None:
+            self.logger.experiment.add_text(
+                "Training/Epoch_Results", 
+                f"🚀 Epoch {self.current_epoch}: Train Acc: {train_acc:.3f}",
+                self.current_epoch
+            )
 
     def on_validation_epoch_end(self):
         """Called at the end of each validation epoch"""
         # Get current metrics
         val_acc = self.val_accuracy.compute()
         
-        self.logger.experiment.add_text(
-            "Validation/Epoch_Results", 
-            f"📊 Epoch {self.current_epoch}: Val Acc: {val_acc:.3f}",
-            self.current_epoch
-        )
+        if self.logger is not None:
+            self.logger.experiment.add_text(
+                "Validation/Epoch_Results", 
+                f"📊 Epoch {self.current_epoch}: Val Acc: {val_acc:.3f}",
+                self.current_epoch
+            )
