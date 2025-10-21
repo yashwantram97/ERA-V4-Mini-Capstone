@@ -4,9 +4,27 @@ Robust Learning Rate Finder - Run Multiple Times
 This script runs the LR finder multiple times and provides statistics
 to help you choose a more reliable learning rate.
 
+⚠️  IMPORTANT: This script runs on SINGLE GPU/CPU only (not distributed).
+For multi-GPU configs (g5, p3), the batch size is automatically scaled down
+to prevent OOM errors.
+
 Usage:
-    python find_lr_robust.py --config local --runs 5
-    python find_lr_robust.py --config g5 --runs 3
+    # Local development (M4 Pro)
+    python find_lr.py --config local --runs 3
+    
+    # AWS g5.12xlarge (auto-scales from 256 to 64 per GPU)
+    python find_lr.py --config g5 --runs 3
+    
+    # AWS p3.16xlarge (auto-scales from 256 to 32 per GPU)
+    python find_lr.py --config p3 --runs 3
+    
+    # Manual batch size override (if still getting OOM)
+    python find_lr.py --config g5 --runs 3 --batch-size 32
+
+Memory Requirements:
+    - Local (batch=64):  ~4-6 GB (MPS/CPU)
+    - G5 (batch=64):     ~4-6 GB (single A10G)
+    - P3 (batch=32):     ~2-4 GB (single V100)
 """
 
 import argparse
@@ -39,6 +57,12 @@ def main():
         default=3,
         help='Number of times to run LR finder (default: 3)'
     )
+    parser.add_argument(
+        '--batch-size',
+        type=int,
+        default=None,
+        help='Override batch size for LR finder (default: auto-detect from config)'
+    )
     
     args = parser.parse_args()
     
@@ -47,6 +71,23 @@ def main():
     config = get_config(args.config)
     print(config)
     
+    # ⚠️  IMPORTANT: LR Finder runs on SINGLE GPU only
+    # Scale down batch size for multi-GPU configs to prevent OOM
+    if args.batch_size is not None:
+        # User manually specified batch size
+        lr_finder_batch_size = args.batch_size
+        print(f"\n🔧 Manual batch size override: {lr_finder_batch_size}")
+    elif hasattr(config, 'num_devices') and config.num_devices > 1:
+        # Multi-GPU config detected - scale down to per-GPU batch size
+        lr_finder_batch_size = config.batch_size // config.num_devices
+        print(f"\n⚠️  Multi-GPU config detected ({config.num_devices} devices)")
+        print(f"   Original batch size: {config.batch_size}")
+        print(f"   LR Finder batch size (single GPU): {lr_finder_batch_size}")
+        print(f"   This prevents OOM on single GPU during LR finding")
+    else:
+        lr_finder_batch_size = config.batch_size
+        print(f"\n✅ Single GPU/CPU config - using full batch size: {lr_finder_batch_size}")
+    
     # Setup
     train_transforms = get_transforms(transform_type="train", mean=config.mean, std=config.std)
     imagenet_dm = ImageNetDataModule(
@@ -54,12 +95,29 @@ def main():
         val_img_dir=config.val_img_dir,
         mean=config.mean,
         std=config.std,
-        batch_size=config.batch_size,
+        batch_size=lr_finder_batch_size,  # Use scaled batch size
         num_workers=config.num_workers,
         pin_memory=True
     )
     imagenet_dm.setup(stage='fit')
     experiment_dir = config.logs_dir / config.experiment_name
+    
+    # Check available GPU memory if using CUDA
+    if torch.cuda.is_available():
+        gpu_name = torch.cuda.get_device_name(0)
+        gpu_memory_gb = torch.cuda.get_device_properties(0).total_memory / 1e9
+        print(f"\n🎮 GPU Information:")
+        print(f"   Device: {gpu_name}")
+        print(f"   Memory: {gpu_memory_gb:.1f} GB")
+        print(f"   Batch size: {lr_finder_batch_size}")
+        
+        # Estimate memory requirement
+        estimated_memory_gb = (lr_finder_batch_size * 3 * 224 * 224 * 4) / 1e9 * 10  # Rough estimate
+        print(f"   Estimated memory usage: ~{estimated_memory_gb:.1f} GB")
+        
+        if estimated_memory_gb > gpu_memory_gb * 0.9:
+            print(f"   ⚠️  WARNING: May run out of memory!")
+            print(f"   💡 Consider reducing batch size if OOM occurs")
     
     # Run multiple times
     suggested_lrs = []
@@ -72,6 +130,7 @@ def main():
     print(f"   Iterations per run: {config.lr_finder_kwargs['num_iter']}")
     print(f"   Number of runs: {args.runs}")
     print(f"   Total iterations: {config.lr_finder_kwargs['num_iter'] * args.runs}")
+    print(f"   Batch size: {lr_finder_batch_size}")
     
     for run_num in range(1, args.runs + 1):
         print(f"\n{'='*80}")
