@@ -62,7 +62,7 @@ PRECISION = "16-mixed"  # A10G benefits from mixed precision
 PROG_RESIZING_FIXRES_SCHEDULE = {
     0: (128, True),    # Epochs 0-9: 128px, train augs (17% - fast initial learning)
     10: (224, True),   # Epochs 10-49: 224px, train augs (67% - main training phase)
-    50: (256, False),  # Epochs 50-59: 256px, test augs (17% - FixRes fine-tuning)
+    50: (256, True),  # Epochs 50-59: 256px, test augs (17% - FixRes fine-tuning)
 }
 
 # Early stopping - more patience for full training
