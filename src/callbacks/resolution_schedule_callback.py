@@ -118,18 +118,18 @@ class ResolutionScheduleCallback(Callback):
             transform: Transform object (Compose, list, or individual transform)
             indent: Indentation string for nested transforms
         """
-        import albumentations as A
+        import torchvision.transforms as T
         
         try:
-            # Handle Albumentations Compose
-            if isinstance(transform, A.Compose):
+            # Handle torchvision Compose
+            if isinstance(transform, T.Compose):
                 for i, t in enumerate(transform.transforms, 1):
                     self._print_single_transform(t, i, indent)
             
             # Handle list of transforms
             elif isinstance(transform, list):
                 for i, t in enumerate(transform, 1):
-                    if isinstance(t, A.Compose):
+                    if isinstance(t, T.Compose):
                         self._print_transforms(t, indent)
                     else:
                         self._print_single_transform(t, i, indent)

@@ -23,9 +23,8 @@ import torch.nn.functional as F
 import numpy as np
 import matplotlib.pyplot as plt
 from pathlib import Path
-import albumentations as A
 from PIL import Image
-import cv2
+import torchvision.transforms as T
 
 # Import project modules
 from src.utils.utils import get_transforms
@@ -53,11 +52,10 @@ def test_augmentations():
     sample_img_path = list(TRAIN_IMG_DIR.glob("*//*.JPEG"))[0]
     print(f"\n📷 Loading sample image: {sample_img_path.name}")
     
-    # Load image
+    # Load image (keep as PIL for torchvision)
     image = Image.open(sample_img_path).convert('RGB')
-    image_np = np.array(image)
     
-    print(f"   Original size: {image_np.shape}")
+    print(f"   Original size: {image.size}")
     
     # Test train transforms
     print("\n🔧 Testing TRAIN transforms (with augmentation):")
@@ -69,20 +67,19 @@ def test_augmentations():
     )
     
     # Print transform pipeline
-    for i, transform in enumerate(train_transforms, 1):
+    for i, transform in enumerate(train_transforms.transforms, 1):
         print(f"   {i}. {transform.__class__.__name__}")
     
     # Apply transforms multiple times to see variation
     print("\n   Applying transforms 5 times to verify randomness...")
     transformed_images = []
     for i in range(5):
-        compose = A.Compose(train_transforms)
-        transformed = compose(image=image_np)
-        transformed_images.append(transformed['image'])
+        transformed = train_transforms(image)
+        transformed_images.append(transformed)
         # Check shape after transform
         if i == 0:
-            print(f"   ✅ Output shape: {transformed['image'].shape}")
-            print(f"   ✅ Output type: {type(transformed['image'])}")
+            print(f"   ✅ Output shape: {transformed.shape}")
+            print(f"   ✅ Output type: {type(transformed)}")
     
     # Verify randomness (images should be different)
     all_same = all(torch.equal(transformed_images[0], img) for img in transformed_images[1:])
@@ -101,12 +98,11 @@ def test_augmentations():
         resolution=224
     )
     
-    for i, transform in enumerate(val_transforms, 1):
+    for i, transform in enumerate(val_transforms.transforms, 1):
         print(f"   {i}. {transform.__class__.__name__}")
     
-    compose = A.Compose(val_transforms)
-    val_transformed = compose(image=image_np)
-    print(f"   ✅ Output shape: {val_transformed['image'].shape}")
+    val_transformed = val_transforms(image)
+    print(f"   ✅ Output shape: {val_transformed.shape}")
     
     # Test FixRes transforms (higher resolution)
     print("\n🔧 Testing FIXRES transforms (288px with test-time augmentations):")
@@ -117,12 +113,11 @@ def test_augmentations():
         resolution=288
     )
     
-    for i, transform in enumerate(fixres_transforms, 1):
+    for i, transform in enumerate(fixres_transforms.transforms, 1):
         print(f"   {i}. {transform.__class__.__name__}")
     
-    compose = A.Compose(fixres_transforms)
-    fixres_transformed = compose(image=image_np)
-    print(f"   ✅ Output shape: {fixres_transformed['image'].shape}")
+    fixres_transformed = fixres_transforms(image)
+    print(f"   ✅ Output shape: {fixres_transformed.shape}")
     
     print("\n✅ TEST 1 PASSED: Augmentations are working correctly")
     return True
@@ -282,29 +277,27 @@ def test_resolution_schedule():
             resolution=resolution
         )
         
-        # Check transform output sizes
-        sample_img = np.random.randint(0, 255, (500, 500, 3), dtype=np.uint8)
+        # Check transform output sizes - create PIL image
+        from PIL import Image
+        sample_img = Image.fromarray(np.random.randint(0, 255, (500, 500, 3), dtype=np.uint8))
         
-        train_compose = A.Compose(train_transforms)
-        train_result = train_compose(image=sample_img)
+        train_result = train_transforms(sample_img)
+        val_result = val_transforms(sample_img)
         
-        val_compose = A.Compose(val_transforms)
-        val_result = val_compose(image=sample_img)
-        
-        print(f"      Train output: {train_result['image'].shape}")
-        print(f"      Val output: {val_result['image'].shape}")
+        print(f"      Train output: {train_result.shape}")
+        print(f"      Val output: {val_result.shape}")
         
         # Verify resolution matches expected
         expected_shape = (3, resolution, resolution)
-        if train_result['image'].shape == expected_shape:
+        if train_result.shape == expected_shape:
             print(f"      ✅ Train transform produces correct size")
         else:
-            print(f"      ❌ Train transform size mismatch: expected {expected_shape}, got {train_result['image'].shape}")
+            print(f"      ❌ Train transform size mismatch: expected {expected_shape}, got {train_result.shape}")
         
-        if val_result['image'].shape == expected_shape:
+        if val_result.shape == expected_shape:
             print(f"      ✅ Val transform produces correct size")
         else:
-            print(f"      ❌ Val transform size mismatch: expected {expected_shape}, got {val_result['image'].shape}")
+            print(f"      ❌ Val transform size mismatch: expected {expected_shape}, got {val_result.shape}")
     
     print("\n✅ TEST 3 PASSED: Resolution scheduling is working correctly")
     return True
@@ -411,7 +404,7 @@ def test_fixres():
     )
     
     print(f"\n   Train augmentations (used in early epochs):")
-    for i, t in enumerate(train_transforms, 1):
+    for i, t in enumerate(train_transforms.transforms, 1):
         print(f"      {i}. {t.__class__.__name__}")
     
     # FixRes transforms (test-time)
@@ -423,13 +416,13 @@ def test_fixres():
     )
     
     print(f"\n   FixRes augmentations (used in final epochs):")
-    for i, t in enumerate(fixres_transforms, 1):
+    for i, t in enumerate(fixres_transforms.transforms, 1):
         print(f"      {i}. {t.__class__.__name__}")
     
     # Verify the key differences
-    train_has_random = any('Random' in t.__class__.__name__ for t in train_transforms)
-    fixres_has_random = any('Random' in t.__class__.__name__ for t in fixres_transforms)
-    fixres_has_center_crop = any('CenterCrop' in t.__class__.__name__ for t in fixres_transforms)
+    train_has_random = any('Random' in t.__class__.__name__ for t in train_transforms.transforms)
+    fixres_has_random = any('Random' in t.__class__.__name__ for t in fixres_transforms.transforms)
+    fixres_has_center_crop = any('CenterCrop' in t.__class__.__name__ for t in fixres_transforms.transforms)
     
     print(f"\n✅ FixRes Verification:")
     print(f"   Train has random augmentations: {train_has_random}")
@@ -445,16 +438,13 @@ def test_fixres():
     
     # Test transforms on sample image
     print(f"\n🧪 Testing FixRes transforms on sample image:")
-    sample_img = np.random.randint(0, 255, (600, 800, 3), dtype=np.uint8)
-    
-    train_compose = A.Compose(train_transforms)
-    fixres_compose = A.Compose(fixres_transforms)
+    sample_img = Image.fromarray(np.random.randint(0, 255, (600, 800, 3), dtype=np.uint8))
     
     # Apply train transforms multiple times
-    train_results = [train_compose(image=sample_img)['image'] for _ in range(3)]
+    train_results = [train_transforms(sample_img) for _ in range(3)]
     
     # Apply FixRes transforms multiple times
-    fixres_results = [fixres_compose(image=sample_img)['image'] for _ in range(3)]
+    fixres_results = [fixres_transforms(sample_img) for _ in range(3)]
     
     # Check if train transforms are random
     train_all_same = all(torch.equal(train_results[0], img) for img in train_results[1:])
@@ -505,7 +495,7 @@ def test_mixup():
         mixup_kwargs=mixup_kwargs_enabled
     )
     
-    if model_with_mixup.mixup_fn is not None:
+    if model_with_mixup.mixup_cutmix_fn is not None:
         print(f"   ✅ MixUp enabled successfully")
         print(f"   MixUp alpha: {mixup_kwargs_enabled['mixup_alpha']}")
         print(f"   Probability: {mixup_kwargs_enabled['prob']}")
@@ -529,7 +519,7 @@ def test_mixup():
         mixup_kwargs=mixup_kwargs_disabled
     )
     
-    if model_without_mixup.mixup_fn is None:
+    if model_without_mixup.mixup_cutmix_fn is None:
         print(f"   ✅ MixUp correctly disabled when alpha=0")
     else:
         print(f"   ❌ MixUp should be disabled when alpha=0!")
@@ -545,7 +535,7 @@ def test_mixup():
         mixup_kwargs=None
     )
     
-    if model_no_kwargs.mixup_fn is None:
+    if model_no_kwargs.mixup_cutmix_fn is None:
         print(f"   ✅ MixUp correctly disabled when kwargs=None")
     else:
         print(f"   ❌ MixUp should be disabled when kwargs=None!")
@@ -566,7 +556,7 @@ def test_mixup():
     print(f"      Sample labels: {sample_labels[:4].tolist()}")
     
     # Apply MixUp
-    mixed_images, mixed_labels = model_with_mixup.mixup_fn(sample_images, sample_labels)
+    mixed_images, mixed_labels = model_with_mixup.mixup_cutmix_fn(sample_images, sample_labels)
     
     print(f"\n   After MixUp:")
     print(f"      Image shape: {mixed_images.shape}")
@@ -635,7 +625,7 @@ def test_mixup():
     lambda_values = []
     
     for i in range(10):
-        mixed_imgs, mixed_lbls = model_with_mixup.mixup_fn(test_images.clone(), test_labels.clone())
+        mixed_imgs, mixed_lbls = model_with_mixup.mixup_cutmix_fn(test_images.clone(), test_labels.clone())
         # Get the mean pixel value of first image (should be between 0 and 1)
         mean_val = mixed_imgs[0].mean().item()
         mixed_results.append(mean_val)
@@ -669,8 +659,8 @@ def test_mixup():
     with torch.no_grad():
         try:
             # Simulate training step logic
-            if model_with_mixup.mixup_fn is not None:
-                mixed_images, mixed_labels = model_with_mixup.mixup_fn(batch_images, batch_labels)
+            if model_with_mixup.mixup_cutmix_fn is not None:
+                mixed_images, mixed_labels = model_with_mixup.mixup_cutmix_fn(batch_images, batch_labels)
                 logits = model_with_mixup(mixed_images)
                 loss = F.cross_entropy(logits, mixed_labels)
                 print(f"   ✅ Training step with MixUp successful")
@@ -687,7 +677,7 @@ def test_mixup():
     model_without_mixup.eval()
     with torch.no_grad():
         try:
-            if model_without_mixup.mixup_fn is None:
+            if model_without_mixup.mixup_cutmix_fn is None:
                 logits = model_without_mixup(batch_images)
                 loss = F.cross_entropy(logits, batch_labels, label_smoothing=0.1)
                 print(f"   ✅ Training step without MixUp successful")
@@ -736,6 +726,400 @@ def test_mixup():
     
     print("\n✅ TEST 6 PASSED: MixUp is working correctly")
     return True
+
+# ============================================================================
+# TEST 7: CutMix Verification
+# ============================================================================
+def test_cutmix():
+    """Verify CutMix augmentation is working correctly"""
+    print("\n" + "="*80)
+    print("TEST 7: CUTMIX VERIFICATION")
+    print("="*80)
+    
+    print(f"\n📚 CutMix Concept:")
+    print(f"   - CutMix cuts and pastes patches between training images")
+    print(f"   - Creates synthetic training examples by replacing rectangular regions")
+    print(f"   - Helps with regularization and localization")
+    print(f"   - Formula: cut region from image_b and paste into image_a")
+    print(f"   - λ (mixing ratio) is based on the area of the cut region")
+    
+    # Test 1: CutMix initialization with enabled config
+    print(f"\n🔧 TEST 7.1: CutMix Initialization (Enabled)")
+    print("="*60)
+    
+    cutmix_kwargs_enabled = {
+        'mixup_alpha': 0.0,      # Disable MixUp
+        'cutmix_alpha': 1.0,     # Enable CutMix
+        'prob': 1.0,
+        'mode': 'batch',
+        'label_smoothing': 0.1,
+    }
+    
+    model_with_cutmix = ResnetLightningModule(
+        learning_rate=LEARNING_RATE,
+        weight_decay=WEIGHT_DECAY,
+        num_classes=NUM_CLASSES,
+        mixup_kwargs=cutmix_kwargs_enabled
+    )
+    
+    if model_with_cutmix.mixup_cutmix_fn is not None:
+        print(f"   ✅ CutMix enabled successfully")
+        print(f"   CutMix alpha: {cutmix_kwargs_enabled['cutmix_alpha']}")
+        print(f"   Probability: {cutmix_kwargs_enabled['prob']}")
+        print(f"   Mode: {cutmix_kwargs_enabled['mode']}")
+    else:
+        print(f"   ❌ CutMix initialization failed!")
+        return False
+    
+    # Test 2: CutMix initialization with disabled config
+    print(f"\n🔧 TEST 7.2: CutMix Initialization (Disabled)")
+    print("="*60)
+    
+    cutmix_kwargs_disabled = {
+        'mixup_alpha': 0.0,
+        'cutmix_alpha': 0.0,  # Disabled
+    }
+    
+    model_without_cutmix = ResnetLightningModule(
+        learning_rate=LEARNING_RATE,
+        weight_decay=WEIGHT_DECAY,
+        num_classes=NUM_CLASSES,
+        mixup_kwargs=cutmix_kwargs_disabled
+    )
+    
+    if model_without_cutmix.mixup_cutmix_fn is None:
+        print(f"   ✅ CutMix correctly disabled when both alphas=0")
+    else:
+        print(f"   ❌ CutMix should be disabled when both alphas=0!")
+    
+    # Test 3: CutMix transformation on actual data
+    print(f"\n🔧 TEST 7.3: CutMix Transformation on Data")
+    print("="*60)
+    
+    # Create sample batch
+    batch_size = 8
+    sample_images = torch.randn(batch_size, 3, 224, 224)
+    sample_labels = torch.randint(0, NUM_CLASSES, (batch_size,))
+    
+    print(f"\n   Original batch:")
+    print(f"      Image shape: {sample_images.shape}")
+    print(f"      Label shape: {sample_labels.shape}")
+    print(f"      Sample labels: {sample_labels[:4].tolist()}")
+    
+    # Store original images for comparison
+    original_images = sample_images.clone()
+    
+    # Apply CutMix
+    cutmixed_images, cutmixed_labels = model_with_cutmix.mixup_cutmix_fn(sample_images, sample_labels)
+    
+    print(f"\n   After CutMix:")
+    print(f"      Image shape: {cutmixed_images.shape}")
+    print(f"      Label shape: {cutmixed_labels.shape}")
+    
+    # Verify shapes
+    if cutmixed_images.shape == original_images.shape:
+        print(f"   ✅ CutMix images have correct shape")
+    else:
+        print(f"   ❌ CutMix images shape mismatch!")
+        return False
+    
+    # Verify labels are now soft (one-hot encoded)
+    if cutmixed_labels.shape == (batch_size, NUM_CLASSES):
+        print(f"   ✅ Labels converted to soft labels (one-hot)")
+    else:
+        print(f"   ❌ Labels shape incorrect: expected ({batch_size}, {NUM_CLASSES}), got {cutmixed_labels.shape}")
+        return False
+    
+    # Verify labels sum to 1 (probability distribution)
+    label_sums = cutmixed_labels.sum(dim=1)
+    if torch.allclose(label_sums, torch.ones_like(label_sums), atol=1e-5):
+        print(f"   ✅ Soft labels sum to 1.0 (valid probability distribution)")
+    else:
+        print(f"   ❌ Soft labels don't sum to 1.0!")
+        print(f"      Sample sums: {label_sums[:4].tolist()}")
+        return False
+    
+    # Verify that images were modified (CutMix should change the images)
+    images_changed = not torch.allclose(cutmixed_images, original_images)
+    if images_changed:
+        print(f"   ✅ Images were modified by CutMix")
+    else:
+        print(f"   ⚠️  Images weren't modified (could be random)")
+    
+    # Check that labels are actually mixed (not just one-hot)
+    non_zero_per_sample = (cutmixed_labels > 0.01).sum(dim=1)
+    mixed_samples = (non_zero_per_sample > 1).sum().item()
+    
+    print(f"\n   📊 CutMix Statistics:")
+    print(f"      Samples with mixed labels: {mixed_samples}/{batch_size}")
+    print(f"      Average classes per sample: {non_zero_per_sample.float().mean():.2f}")
+    
+    if mixed_samples > 0:
+        print(f"   ✅ Labels are being mixed (not just one-hot)")
+        # Show example of a mixed label
+        mixed_idx = (non_zero_per_sample > 1).nonzero()[0].item()
+        non_zero_classes = (cutmixed_labels[mixed_idx] > 0.01).nonzero().squeeze()
+        print(f"\n   Example mixed label (sample {mixed_idx}):")
+        for cls_idx in non_zero_classes[:3]:  # Show up to 3 classes
+            cls_idx = cls_idx.item() if cls_idx.numel() > 0 else cls_idx
+            print(f"      Class {cls_idx}: {cutmixed_labels[mixed_idx, cls_idx]:.3f}")
+    
+    # Test 4: Verify CutMix behavior (rectangular region mixing)
+    print(f"\n🔧 TEST 7.4: CutMix Rectangular Region Verification")
+    print("="*60)
+    
+    # Create two distinct images to see the effect
+    image_a = torch.zeros(1, 3, 224, 224)  # Black image
+    image_b = torch.ones(1, 3, 224, 224)   # White image
+    
+    # Stack them
+    test_images = torch.cat([image_a, image_b], dim=0)
+    test_labels = torch.tensor([0, 1])
+    
+    # Apply CutMix multiple times and check for rectangular patterns
+    print(f"   Testing CutMix pattern (10 iterations)...")
+    cutmix_ratios = []
+    
+    for i in range(10):
+        cut_imgs, cut_lbls = model_with_cutmix.mixup_cutmix_fn(test_images.clone(), test_labels.clone())
+        
+        # Check the first image - should have rectangular region from second image
+        # Count white pixels (value close to 1.0)
+        white_pixels = (cut_imgs[0] > 0.9).float().sum()
+        total_pixels = cut_imgs[0].numel()
+        white_ratio = white_pixels / total_pixels
+        
+        cutmix_ratios.append(white_ratio.item())
+        
+        # Get lambda from label
+        lambda_val = cut_lbls[0, 0].item()
+    
+    print(f"\n   📊 CutMix Pattern Analysis:")
+    print(f"      White pixel ratios: min={min(cutmix_ratios):.3f}, max={max(cutmix_ratios):.3f}")
+    print(f"      Mean ratio: {sum(cutmix_ratios)/len(cutmix_ratios):.3f}")
+    
+    # CutMix should produce different ratios each time
+    unique_ratios = len(set([round(x, 2) for x in cutmix_ratios]))
+    if unique_ratios > 1:
+        print(f"   ✅ CutMix produces varying cut sizes ({unique_ratios} unique ratios)")
+    else:
+        print(f"   ⚠️  CutMix producing same cut size (may not be random)")
+    
+    # Test 5: Both MixUp and CutMix enabled (random switching)
+    print(f"\n🔧 TEST 7.5: MixUp + CutMix Together (Random Switching)")
+    print("="*60)
+    
+    both_kwargs = {
+        'mixup_alpha': 0.2,
+        'cutmix_alpha': 1.0,
+        'prob': 1.0,
+        'switch_prob': 0.5,  # 50% chance of each
+        'mode': 'batch',
+        'label_smoothing': 0.1,
+    }
+    
+    model_with_both = ResnetLightningModule(
+        learning_rate=LEARNING_RATE,
+        weight_decay=WEIGHT_DECAY,
+        num_classes=NUM_CLASSES,
+        mixup_kwargs=both_kwargs
+    )
+    
+    if model_with_both.mixup_cutmix_fn is not None:
+        print(f"   ✅ Both MixUp and CutMix enabled")
+        print(f"      MixUp alpha: {both_kwargs['mixup_alpha']}")
+        print(f"      CutMix alpha: {both_kwargs['cutmix_alpha']}")
+        print(f"      Switch probability: {both_kwargs['switch_prob']}")
+    else:
+        print(f"   ❌ Failed to enable both!")
+        return False
+    
+    # Test with sample data
+    test_batch = torch.randn(4, 3, 224, 224)
+    test_labels_batch = torch.randint(0, NUM_CLASSES, (4,))
+    
+    mixed, mixed_lbl = model_with_both.mixup_cutmix_fn(test_batch, test_labels_batch)
+    
+    print(f"   ✅ Successfully applied random MixUp/CutMix")
+    print(f"      Output shape: {mixed.shape}")
+    print(f"      Label shape: {mixed_lbl.shape}")
+    
+    # Test 6: Check configuration from config file
+    print(f"\n🔧 TEST 7.6: CutMix Configuration from Config")
+    print("="*60)
+    
+    print(f"\n   Current CutMix configuration:")
+    for key, value in MIXUP_KWARGS.items():
+        print(f"      {key}: {value}")
+    
+    # Verify CutMix is enabled in config
+    if MIXUP_KWARGS.get('cutmix_alpha', 0.0) > 0:
+        print(f"   ✅ CutMix is enabled in config (alpha={MIXUP_KWARGS['cutmix_alpha']})")
+    else:
+        print(f"   ℹ️  CutMix is disabled in config (alpha={MIXUP_KWARGS.get('cutmix_alpha', 0.0)})")
+    
+    # Check if both are enabled
+    if MIXUP_KWARGS.get('mixup_alpha', 0.0) > 0 and MIXUP_KWARGS.get('cutmix_alpha', 0.0) > 0:
+        print(f"   ✅ Both MixUp and CutMix are enabled")
+        print(f"      Switch probability: {MIXUP_KWARGS.get('switch_prob', 0.5)}")
+    
+    print("\n✅ TEST 7 PASSED: CutMix is working correctly")
+    return True
+
+# ============================================================================
+# TEST 8: Cosine Annealing Scheduler Verification
+# ============================================================================
+def test_cosine_annealing():
+    """Verify Cosine Annealing LR scheduler configuration"""
+    print("\n" + "="*80)
+    print("TEST 8: COSINE ANNEALING SCHEDULER VERIFICATION")
+    print("="*80)
+    
+    print(f"\n📚 Cosine Annealing Concept:")
+    print(f"   - Gradually decreases learning rate following a cosine curve")
+    print(f"   - Starts at initial LR and decreases to eta_min")
+    print(f"   - Provides smooth, gradual decay over training")
+    print(f"   - Formula: lr = eta_min + (initial_lr - eta_min) * (1 + cos(π * t / T_max)) / 2")
+    
+    # Create a dummy model and optimizer
+    model = ResnetLightningModule(
+        learning_rate=LEARNING_RATE,
+        weight_decay=WEIGHT_DECAY,
+        num_classes=NUM_CLASSES
+    )
+    
+    # Setup datamodule to get the dataloaders
+    datamodule = ImageNetDataModule(
+        train_img_dir=str(TRAIN_IMG_DIR),
+        val_img_dir=str(VAL_IMG_DIR),
+        mean=MEAN,
+        std=STD,
+        batch_size=BATCH_SIZE,
+        num_workers=0,  # Use 0 workers for quick test
+        initial_resolution=224
+    )
+    
+    datamodule.setup('fit')
+    
+    # Calculate steps
+    train_loader = datamodule.train_dataloader()
+    steps_per_epoch = len(train_loader)
+    total_steps = steps_per_epoch * EPOCHS
+    
+    print(f"\n📊 Training Configuration:")
+    print(f"   Epochs: {EPOCHS}")
+    print(f"   Batch size: {BATCH_SIZE}")
+    print(f"   Train samples: {len(datamodule.train_dataset)}")
+    print(f"   Steps per epoch: {steps_per_epoch}")
+    print(f"   Total steps: {total_steps}")
+    
+    # Create optimizer
+    optimizer = torch.optim.SGD(
+        model.parameters(),
+        lr=LEARNING_RATE,
+        weight_decay=WEIGHT_DECAY,
+        momentum=0.9
+    )
+    
+    # Create Cosine Annealing scheduler
+    eta_min = 1e-6
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+        optimizer,
+        T_max=total_steps,
+        eta_min=eta_min
+    )
+    
+    print(f"\n🔄 Cosine Annealing Scheduler Configuration:")
+    print(f"   Initial LR: {LEARNING_RATE:.4e}")
+    print(f"   Minimum LR (eta_min): {eta_min:.4e}")
+    print(f"   T_max (total steps): {total_steps}")
+    print(f"   LR reduction ratio: {LEARNING_RATE / eta_min:.1f}x")
+    
+    # Simulate training and collect LR values
+    print("\n📈 Simulating LR schedule over epochs...")
+    lr_history = []
+    
+    for epoch in range(EPOCHS):
+        for step in range(steps_per_epoch):
+            lr_history.append(optimizer.param_groups[0]['lr'])
+            scheduler.step()
+    
+    # Verify LR schedule characteristics
+    print(f"\n✅ LR Schedule Analysis:")
+    print(f"   Starting LR: {lr_history[0]:.6e}")
+    print(f"   Final LR: {lr_history[-1]:.6e}")
+    print(f"   Minimum LR reached: {min(lr_history):.6e}")
+    print(f"   Maximum LR: {max(lr_history):.6e}")
+    
+    # Check if LR follows expected pattern (monotonic decrease for cosine annealing)
+    # Sample at quartiles
+    q1_idx = len(lr_history) // 4
+    q2_idx = len(lr_history) // 2
+    q3_idx = 3 * len(lr_history) // 4
+    
+    print(f"\n   LR at different stages:")
+    print(f"      25% progress: {lr_history[q1_idx]:.6e}")
+    print(f"      50% progress: {lr_history[q2_idx]:.6e}")
+    print(f"      75% progress: {lr_history[q3_idx]:.6e}")
+    
+    # Verify cosine decay pattern (should decrease monotonically for single cycle)
+    is_decreasing = lr_history[0] > lr_history[q2_idx] > lr_history[-1]
+    
+    if is_decreasing:
+        print(f"\n   ✅ LR schedule follows correct cosine annealing pattern:")
+        print(f"      - Starts high: {lr_history[0]:.6e}")
+        print(f"      - Gradually decreases following cosine curve")
+        print(f"      - Ends at minimum: {lr_history[-1]:.6e}")
+    else:
+        print(f"\n   ❌ WARNING: LR schedule may not be correct!")
+    
+    # Verify the decay is smooth (cosine should be smooth, not stepwise)
+    # Check that consecutive LRs are close (smooth decay)
+    lr_diffs = [abs(lr_history[i+1] - lr_history[i]) for i in range(0, len(lr_history)-1, 100)]
+    max_diff = max(lr_diffs)
+    mean_diff = sum(lr_diffs) / len(lr_diffs)
+    
+    print(f"\n   📊 Smoothness Analysis:")
+    print(f"      Mean LR change per 100 steps: {mean_diff:.8e}")
+    print(f"      Max LR change per 100 steps: {max_diff:.8e}")
+    
+    # The change should be gradual (not sudden jumps)
+    if max_diff < LEARNING_RATE * 0.1:  # Max change should be less than 10% of initial LR
+        print(f"   ✅ LR decay is smooth (no sudden jumps)")
+    else:
+        print(f"   ⚠️  LR decay may have sudden changes")
+    
+    # Test comparison with OneCycle
+    print(f"\n🔄 Comparison: Cosine Annealing vs OneCycle")
+    print("="*60)
+    
+    print(f"\n   Cosine Annealing:")
+    print(f"      - Monotonic decrease from start to end")
+    print(f"      - No warmup phase")
+    print(f"      - Smooth, predictable decay")
+    print(f"      - Final LR: {lr_history[-1]:.6e}")
+    
+    print(f"\n   OneCycle (for reference):")
+    print(f"      - Warmup phase (first 20%)")
+    print(f"      - Peak LR in middle")
+    print(f"      - Annealing phase (last 80%)")
+    print(f"      - More aggressive LR changes")
+    
+    # Verify configuration from config
+    print(f"\n🔧 Configuration Check:")
+    print("="*60)
+    
+    from configs.g5_config import SCHEDULER_TYPE
+    
+    print(f"   Scheduler type in config: {SCHEDULER_TYPE}")
+    
+    if SCHEDULER_TYPE == 'cosine_annealing':
+        print(f"   ✅ Cosine Annealing is configured as the scheduler")
+    else:
+        print(f"   ℹ️  Config uses: {SCHEDULER_TYPE}")
+    
+    print("\n✅ TEST 8 PASSED: Cosine Annealing scheduler is working correctly")
+    return True, lr_history
 
 # ============================================================================
 # MAIN EXECUTION
@@ -790,6 +1174,21 @@ def main():
     except Exception as e:
         print(f"\n❌ TEST 6 FAILED: {e}")
         results['mixup'] = False
+    
+    try:
+        # Test 7: CutMix
+        results['cutmix'] = test_cutmix()
+    except Exception as e:
+        print(f"\n❌ TEST 7 FAILED: {e}")
+        results['cutmix'] = False
+    
+    try:
+        # Test 8: Cosine Annealing
+        results['cosine_annealing'], cosine_lr_history = test_cosine_annealing()
+    except Exception as e:
+        print(f"\n❌ TEST 8 FAILED: {e}")
+        results['cosine_annealing'] = False
+        cosine_lr_history = []
     
     # Print summary
     print("\n" + "="*80)

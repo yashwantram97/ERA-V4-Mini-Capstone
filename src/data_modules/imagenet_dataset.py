@@ -1,24 +1,20 @@
 import torchvision
 from torch.utils.data import Dataset
-import numpy as np
-import albumentations as A
 
 
 class ImageNetDataset(Dataset):
     """
-    Wrapper around ImageNet data folder to make it compatible with Albumentations.
+    Wrapper around ImageNet data folder with torchvision transforms.
     
-    TorchVision's ImageFolder passes images as positional args: transform(image)
-    Albumentations expects named args: transform(image=image)
-    
-    This wrapper converts between the two formats.
+    This class uses torchvision.datasets.ImageFolder to handle directory structure
+    and applies torchvision transforms directly to PIL images.
     """
     
     def __init__(self, root, transform=None):
         """
         Args:
             root: Root directory path
-            transform: Albumentations transform (expects list of transforms)
+            transform: torchvision.transforms.Compose object
         """
         self.root = root
         self.transform = transform
@@ -30,16 +26,11 @@ class ImageNetDataset(Dataset):
         return len(self.dataset)
     
     def __getitem__(self, idx):
-        # Get image and label from ImageFolder
+        # Get image and label from ImageFolder (image is PIL Image)
         image, label = self.dataset[idx]
         
-        # Convert PIL Image to numpy array (RGB format)
-        image = np.array(image)
-        
-        # Apply Albumentations transforms
+        # Apply torchvision transforms directly to PIL Image
         if self.transform is not None:
-            # get_transforms() always returns A.Compose object
-            transformed = self.transform(image=image)
-            image = transformed['image']
+            image = self.transform(image)
         
         return image, label

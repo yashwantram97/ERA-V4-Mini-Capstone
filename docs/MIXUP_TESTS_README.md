@@ -18,20 +18,20 @@ Added **visualize_mixup()** function that creates visual outputs for MixUp verif
 #### 6.1 - MixUp Initialization (Enabled)
 - **Purpose**: Verify MixUp initializes correctly when enabled
 - **Checks**:
-  - Model creates mixup_fn when alpha > 0
+  - Model creates mixup_cutmix_fn when alpha > 0
   - Configuration parameters are applied correctly
   - Initialization message is displayed
 
 #### 6.2 - MixUp Initialization (Disabled)
 - **Purpose**: Verify MixUp is disabled when alpha=0
 - **Checks**:
-  - Model sets mixup_fn to None when alpha=0
+  - Model sets mixup_cutmix_fn to None when alpha=0
   - No MixUp is applied during training
 
 #### 6.3 - MixUp with None kwargs
 - **Purpose**: Verify MixUp handles None configuration
 - **Checks**:
-  - Model sets mixup_fn to None when kwargs=None
+  - Model sets mixup_cutmix_fn to None when kwargs=None
   - Training proceeds without MixUp
 
 #### 6.4 - MixUp Transformation on Data
