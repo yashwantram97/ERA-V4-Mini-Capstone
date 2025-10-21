@@ -97,6 +97,7 @@ class ResnetLightningModule(L.LightningModule):
             self.model = antialiased_cnns.resnet50(pretrained=False)
         # Use channels_last memory format for faster training
         self.model = self.model.to(memory_format=torch.channels_last)
+        # model = timm.create_model('resnetblur50', pretrained=False)
 
         # Initialize metrics for each stage
         # Why separate metrics? Each stage (train/val/test) needs independent tracking
