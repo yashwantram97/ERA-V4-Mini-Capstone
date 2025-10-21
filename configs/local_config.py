@@ -30,6 +30,8 @@ VAL_IMG_DIR = PROJECT_ROOT / "dataset" / "imagenet-mini" / "val"
 # Logs directory
 LOGS_DIR = PROJECT_ROOT / "logs"
 
+NUM_DEVICES = 1
+
 # Dataset settings
 DATASET_SIZE = 130000  # ImageNet-mini train size
 NUM_CLASSES = 100
@@ -45,9 +47,9 @@ EXPERIMENT_NAME = "imagenet_local_dev"
 # Training settings
 EPOCHS = 60
 BATCH_SIZE = 64  # Optimized for M4 Pro MPS with mixed precision
-LEARNING_RATE = 0.022  # Found with LR finder
+LEARNING_RATE = 0.25  # Found with LR finder
 WEIGHT_DECAY = 1e-4
-SCHEDULER_TYPE = 'one_cycle_policy'
+SCHEDULER_TYPE = 'cosine_annealing'
 
 # DataLoader settings - fewer workers for M4 Pro
 NUM_WORKERS = 4  # M4 Pro has good CPU but shared with training

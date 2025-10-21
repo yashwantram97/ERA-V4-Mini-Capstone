@@ -45,9 +45,9 @@ EXPERIMENT_NAME = "imagenet_g5d_training"
 # Training settings
 EPOCHS = 60
 BATCH_SIZE = 128  # Good starting point for A10G with 24GB
-LEARNING_RATE = 0.022  # Found with LR finder
-WEIGHT_DECAY = 1e-4
-SCHEDULER_TYPE = 'one_cycle_policy'
+LEARNING_RATE = 0.25  # Found with LR finder
+WEIGHT_DECAY =  5e-4
+SCHEDULER_TYPE = 'cosine_annealing'
 
 # DataLoader settings - plenty of CPU cores available
 # In DDP mode, each GPU spawns its own workers
@@ -105,7 +105,7 @@ ONECYCLE_KWARGS = {
 # MixUp/CutMix settings (timm implementation)
 MIXUP_KWARGS = {
     'mixup_alpha': 0.2,      # MixUp alpha (0.0 = disabled, 0.2-1.0 recommended)
-    'cutmix_alpha': 0.0,     # CutMix alpha (0.0 = disabled)
+    'cutmix_alpha': 1.0,     # CutMix alpha (0.0 = disabled)
     'cutmix_minmax': None,   # CutMix min/max ratio
     'prob': 1.0,             # Probability of applying mixup/cutmix
     'switch_prob': 0.5,      # Probability of switching to cutmix when both enabled
