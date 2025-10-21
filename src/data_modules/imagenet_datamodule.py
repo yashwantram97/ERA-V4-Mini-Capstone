@@ -25,6 +25,7 @@ class ImageNetDataModule(L.LightningDataModule):
         pin_memory: bool = True,
         initial_resolution: int = 224,  # Starting resolution
         use_train_augs: bool = True,    # Whether to use train augmentations
+        prefetch_factor: int = 2,       # Number of batches to prefetch
     ):
         """
         Initialize the DataModule
@@ -35,10 +36,11 @@ class ImageNetDataModule(L.LightningDataModule):
             mean: Normalization mean values
             std: Normalization std values
             batch_size: Batch size for training
-            num_workers: Number of workers for data loading
+            num_workers: Number of workers for data loading (per GPU in DDP mode)
             pin_memory: Whether to pin memory for faster GPU transfer
             initial_resolution: Starting image resolution (default 224)
-            use_train_augs: Whether to use training augmentations (default True)        
+            use_train_augs: Whether to use training augmentations (default True)
+            prefetch_factor: Number of batches to prefetch per worker (default 2)
         """
         super().__init__()
 
@@ -54,6 +56,7 @@ class ImageNetDataModule(L.LightningDataModule):
         self.batch_size = batch_size
         self.num_workers = num_workers
         self.pin_memory = pin_memory
+        self.prefetch_factor = prefetch_factor
 
         # Store resolution and augmentation settings
         self.resolution = initial_resolution
@@ -147,7 +150,9 @@ class ImageNetDataModule(L.LightningDataModule):
             shuffle=True, # Lightning automatically replaces your shuffle=True with the correct sampler in DDP.
             num_workers=self.num_workers,
             pin_memory=self.pin_memory,
-            persistent_workers=True if self.num_workers > 0 else False
+            persistent_workers=True if self.num_workers > 0 else False,
+            prefetch_factor=self.prefetch_factor if self.num_workers > 0 else None,
+            drop_last=True  # Ensure even batch sizes for MixUp compatibility
         )
 
     def val_dataloader(self):
@@ -158,5 +163,7 @@ class ImageNetDataModule(L.LightningDataModule):
             shuffle=False,  # No need to shuffle validation data
             num_workers=self.num_workers,
             pin_memory=self.pin_memory,
-            persistent_workers=True if self.num_workers > 0 else False
+            persistent_workers=True if self.num_workers > 0 else False,
+            prefetch_factor=self.prefetch_factor if self.num_workers > 0 else None,
+            drop_last=True  # Ensure even batch sizes for MixUp compatibility
         )

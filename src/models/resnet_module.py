@@ -149,8 +149,8 @@ class ResnetLightningModule(L.LightningModule):
         # Log metrics - Lightning handles the logging automatically
         # Note: sync_dist=True ensures metrics are properly aggregated across all GPUs in DDP mode
         # In single-GPU mode, sync_dist=True is a no-op (no performance penalty)
-        self.log('train/loss', loss, on_step=True, on_epoch=True, prog_bar=True, sync_dist=True)
-        self.log('train/accuracy', self.train_accuracy, on_step=False, on_epoch=True, prog_bar=True, sync_dist=True)
+        self.log('train/loss', loss, on_step=True, on_epoch=True, prog_bar=True)
+        self.log('train/accuracy', self.train_accuracy, on_step=False, on_epoch=True, prog_bar=True)
 
         return loss
 
@@ -173,8 +173,8 @@ class ResnetLightningModule(L.LightningModule):
         
         # Log metrics - sync_dist=True aggregates metrics across GPUs
         # In single-GPU mode, sync_dist=True is a no-op (no performance penalty)
-        self.log('val/loss', loss, on_step=False, on_epoch=True, prog_bar=True, sync_dist=True)
-        self.log('val/accuracy', self.val_accuracy, on_step=False, on_epoch=True, prog_bar=True, sync_dist=True)
+        self.log('val/loss', loss, on_step=False, on_epoch=True, prog_bar=True)
+        self.log('val/accuracy', self.val_accuracy, on_step=False, on_epoch=True, prog_bar=True)
 
     def configure_optimizers(self):
         """

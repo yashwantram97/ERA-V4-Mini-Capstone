@@ -45,7 +45,7 @@ EXPERIMENT_NAME = "imagenet_local_dev"
 # Training settings
 EPOCHS = 60
 BATCH_SIZE = 64  # Optimized for M4 Pro MPS with mixed precision
-LEARNING_RATE = 2.11e-3  # Found with LR finder
+LEARNING_RATE = 0.022  # Found with LR finder
 WEIGHT_DECAY = 1e-4
 SCHEDULER_TYPE = 'one_cycle_policy'
 

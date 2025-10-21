@@ -24,15 +24,15 @@ PROFILE_NAME = "g5"
 PROFILE_DESCRIPTION = "AWS g5.12xlarge - 4x NVIDIA A10G GPUs"
 
 # Dataset paths (AWS EC2 environment)
-TRAIN_IMG_DIR = Path("/home/ec2-user/imagenet1k/train")
-VAL_IMG_DIR = Path("/home/ec2-user/imagenet1k/val")
+TRAIN_IMG_DIR = Path("/mnt/nvme-instance/ImageNet100/train")
+VAL_IMG_DIR = Path("/mnt/nvme-instance/ImageNet100/val")
 
 # Logs directory
 LOGS_DIR = PROJECT_ROOT / "logs"
 
 # Dataset settings (full ImageNet)
-DATASET_SIZE = 1281167  # Full ImageNet-1K train size
-NUM_CLASSES = 1000
+DATASET_SIZE = 130000  # Full ImageNet-1K train size
+NUM_CLASSES = 100
 INPUT_SIZE = (1, 3, 224, 224)
 
 # Normalization constants (ImageNet standard)
@@ -44,31 +44,33 @@ EXPERIMENT_NAME = "imagenet_g5d_training"
 
 # Training settings
 EPOCHS = 60
-BATCH_SIZE = 256  # Good starting point for A10G with 24GB
-LEARNING_RATE = 2.11e-3  # Found with LR finder
+BATCH_SIZE = 128  # Good starting point for A10G with 24GB
+LEARNING_RATE = 0.022  # Found with LR finder
 WEIGHT_DECAY = 1e-4
 SCHEDULER_TYPE = 'one_cycle_policy'
 
 # DataLoader settings - plenty of CPU cores available
-NUM_WORKERS = 12  # 3 workers per GPU (4 GPUs) = 12 total
+# In DDP mode, each GPU spawns its own workers
+# So 4 workers per GPU process × 4 GPUs = 16 total workers
+NUM_WORKERS = 4  # 4 workers per GPU process (reasonable for DDP)
 
 # Precision settings
 PRECISION = "16-mixed"  # A10G benefits from mixed precision
 
 # Progressive Resizing + FixRes Schedule
-# Optimized for 60 epochs on 4x A10G GPUs
+# Optimized for 60 epochs on 4x A10G GPUs with batch size 128
 PROG_RESIZING_FIXRES_SCHEDULE = {
     0: (128, True),    # Epochs 0-9: 128px, train augs (17% - fast initial learning)
     10: (224, True),   # Epochs 10-49: 224px, train augs (67% - main training phase)
-    50: (288, False),  # Epochs 50-59: 288px, test augs (17% - FixRes fine-tuning)
+    50: (256, False),  # Epochs 50-59: 256px, test augs (17% - FixRes fine-tuning)
 }
 
 # Early stopping - more patience for full training
 EARLY_STOPPING_PATIENCE = 10
 
 # Checkpointing
-SAVE_TOP_K = 3  # Save top 3 models
-SAVE_LAST = True
+SAVE_TOP_K = 1  # Save top 3 models
+SAVE_LAST = False
 
 # Logging
 LOG_EVERY_N_STEPS = 50
