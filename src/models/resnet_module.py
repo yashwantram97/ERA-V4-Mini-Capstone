@@ -20,16 +20,16 @@ import lightning as L
 import torch
 import torch.nn.functional as F
 import torchmetrics
-import antialiased_cnns
 from timm.data.mixup import Mixup
 from config import scheduler_type
 import copy
 from torchinfo import summary
 from lightning.pytorch.utilities import rank_zero_only
+import timm
 
 class ResnetLightningModule(L.LightningModule):
     """
-    Lightning wrapper for Cifar100 resnet model
+    Lightning wrapper for ImageNet resnet model
     
     This class defines:
     - Forward pass
@@ -90,14 +90,9 @@ class ResnetLightningModule(L.LightningModule):
         # Initialize model
         # self.model = torch.hub.load("pytorch/vision", "resnet50", weights=None)
         # Use antialiased_cnns for implementing Blur Pool
-        if self.num_classes == 100:
-            self.model = antialiased_cnns.resnet50(pretrained=False)
-            self.model.fc = torch.nn.Linear(self.model.fc.in_features, num_classes)
-        else:
-            self.model = antialiased_cnns.resnet50(pretrained=False)
         # Use channels_last memory format for faster training
+        self.model = timm.create_model('resnetblur50', pretrained=False, num_classes=self.num_classes)
         self.model = self.model.to(memory_format=torch.channels_last)
-        # model = timm.create_model('resnetblur50', pretrained=False)
 
         # Initialize metrics for each stage
         # Why separate metrics? Each stage (train/val/test) needs independent tracking
@@ -195,30 +190,26 @@ class ResnetLightningModule(L.LightningModule):
             # Calculate steps per epoch using Lightning's estimated_stepping_batches
             # This is available during configure_optimizers and accounts for all training settings
             total_steps = self.trainer.estimated_stepping_batches
-            steps_per_epoch = total_steps // self.trainer.max_epochs
             
             # Create OneCycle scheduler with EXACT parameters
             # This was setup in notebook by running set up ocp function
             scheduler = torch.optim.lr_scheduler.OneCycleLR(
                 optimizer,
                 max_lr=self.learning_rate,        
-                epochs=self.trainer.max_epochs,
-                steps_per_epoch=steps_per_epoch,
+                steps=total_steps,
                 pct_start=0.2,          
-                anneal_strategy='cos',  
-                cycle_momentum=True,    
-                base_momentum=0.85,     
-                max_momentum=0.95,      
-                div_factor=100.0,        # Calculated: max_lr/base_lr = 2.35e-04/2.35e-05
-                final_div_factor=1000.0  
+                anneal_strategy='cos',
+                cycle_momentum=True,
+                base_momentum=0.85,
+                max_momentum=0.95,
+                div_factor=100.0,
+                final_div_factor=1000.0
             )
             
             print(f"🔄 Recreated OneCycleLR Scheduler:")
             print(f"   Max LR: {self.learning_rate:.4e}")
             print(f"   Initial LR: {self.learning_rate/100.0:.4e}")
             print(f"   Total steps: {total_steps}")
-            print(f"   Steps per epoch: {steps_per_epoch}")
-            print(f"   Total epochs: {self.trainer.max_epochs}")
             print(f"   Num devices: {self.trainer.num_devices}")
             print(f"   Strategy: {self.trainer.strategy.__class__.__name__}")
             print(f"   Pct start: {0.2}")
@@ -231,6 +222,32 @@ class ResnetLightningModule(L.LightningModule):
                     "interval": "step",  # OneCycle updates every step
                     "frequency": 1,
                     "name": "OneCycleLR"
+                }
+            }
+        elif scheduler_type == 'cosine_annealing':
+            # CosineAnnealingLR scheduler - gradually decreases learning rate following a cosine curve
+            # Calculate total steps for step-based scheduling
+            # Note: estimated_stepping_batches already accounts for all epochs
+            total_steps = self.trainer.estimated_stepping_batches
+            
+            scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+                optimizer,
+                T_max=total_steps,  # Total number of training steps for one cosine cycle
+                eta_min=1e-6  # Minimum learning rate (prevents going to zero)
+            )
+            
+            print(f"📉 CosineAnnealingLR Scheduler:")
+            print(f"   Initial LR: {self.learning_rate:.4e}")
+            print(f"   Min LR (eta_min): {1e-6:.4e}")
+            print(f"   T_max (steps): {total_steps}")
+            print(f"   Num devices: {self.trainer.num_devices}")
+            print(f"   Strategy: {self.trainer.strategy.__class__.__name__}")
+            
+            return {
+                "optimizer": optimizer,
+                "lr_scheduler": {
+                    "scheduler": scheduler,
+                    "interval": "step",  # CosineAnnealing updates every step
                 }
             }
         else:
