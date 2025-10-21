@@ -1,72 +1,38 @@
 from pathlib import Path
-import albumentations as A
-from albumentations.pytorch import ToTensorV2
-import cv2
+import torchvision.transforms as T
 from config import PROJECT_ROOT
 
 def get_transforms(transform_type="train", mean=None, std=None, resolution=224):
     """
-    Get transforms for training or validation
+    Get transforms for training or validation using torchvision
     
     Args:
         transform_type: "train" or "valid"
-        mean: Normalization mean
-        std: Normalization std
+        mean: Normalization mean (list or tuple)
+        std: Normalization std (list or tuple)
         resolution: Target image resolution (default 224)
     
     Returns:
-        Albumentations Compose object with all transforms
+        torchvision.transforms.Compose object with all transforms
     """
-    IMAGENET_MEAN_VALUES = (int(mean[0] * 255), int(mean[1] * 255), int(mean[2] * 255))
-    
     if transform_type == "train":
-        # REVISED: Stronger augmentation to reduce overfitting
-        transforms = A.Compose([
-            A.RandomResizedCrop(
-                size=[resolution, resolution],
-                scale=[0.08, 1.0],  # Standard ImageNet range
-                ratio=[0.75, 1.3333333333333333],
-                interpolation=cv2.INTER_LINEAR
-            ),
-            A.HorizontalFlip(p=0.5),
-            # Stronger color augmentation
-            A.OneOf([
-                A.RandomBrightnessContrast(brightness_limit=0.3, contrast_limit=0.3, p=1.0),  # Increased from 0.2
-                A.HueSaturationValue(hue_shift_limit=15, sat_shift_limit=40, val_shift_limit=30, p=1.0),  # Increased
-                A.ColorJitter(brightness=0.3, contrast=0.3, saturation=0.3, hue=0.1, p=1.0),  # Added
-            ], p=0.7),  # Increased from 0.5
-            # Stronger spatial dropout
-            A.CoarseDropout(
-                num_holes_range=(1, 3),  # Increased from (1, 1) - can drop multiple patches
-                hole_height_range=(int(resolution * 0.1), int(resolution * 0.3)),  # Increased max from 0.25 to 0.3
-                hole_width_range=(int(resolution * 0.1), int(resolution * 0.3)),   # Increased max from 0.25 to 0.3
-                fill=IMAGENET_MEAN_VALUES,  # ImageNet mean in RGB pixel values (0-255)
-                p=0.7  # Increased from 0.5
-            ),
-            # Additional blur augmentation for regularization
-            A.OneOf([
-                A.GaussianBlur(blur_limit=(3, 5), p=1.0),
-                A.MotionBlur(blur_limit=5, p=1.0),
-            ], p=0.2),  # Apply blur 20% of the time
-            A.Normalize(mean=mean, std=std),
-            ToTensorV2(),
+        # Training transforms with TrivialAugmentWide for strong augmentation
+        transforms = T.Compose([
+            T.RandomResizedCrop(resolution, scale=(0.08, 1.0)),
+            T.RandomHorizontalFlip(),
+            T.TrivialAugmentWide(),  # Powerful auto-augmentation policy
+            T.ToTensor(),
+            T.Normalize(mean=mean, std=std),
+            # RandomErasing (PyTorch's Cutout/CoarseDropout equivalent)
+            T.RandomErasing(p=0.5, scale=(0.02, 0.33), ratio=(0.3, 3.3), value='random'),
         ])
     else:
         # Validation/Test transforms - FixRes compatible
-        transforms = A.Compose([
-            A.Resize(
-                height=int(resolution * 256 / 224),  # Scale proportionally
-                width=int(resolution * 256 / 224),
-                interpolation=cv2.INTER_LINEAR,
-                p=1.0
-            ),
-            A.CenterCrop(
-                height=resolution,
-                width=resolution,
-                p=1.0
-            ),
-            A.Normalize(mean=mean, std=std),
-            ToTensorV2(),
+        transforms = T.Compose([
+            T.Resize(int(resolution * 256 / 224)),  # Scale proportionally (256 for 224px)
+            T.CenterCrop(resolution),
+            T.ToTensor(),
+            T.Normalize(mean=mean, std=std),
         ])
 
     return transforms
@@ -76,12 +42,12 @@ def serialize_transforms(transform_compose):
     Convert transforms to a serializable format
     
     Args:
-        transform_compose: albumentations.Compose object
+        transform_compose: torchvision.transforms.Compose object
         
     Returns:
         list: List of transform dictionaries with parameters
     """
-    if not isinstance(transform_compose, A.Compose):
+    if not isinstance(transform_compose, T.Compose):
         return str(transform_compose)
 
     serialized_transforms = []

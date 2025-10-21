@@ -18,9 +18,8 @@ import torch
 import numpy as np
 import matplotlib.pyplot as plt
 from pathlib import Path
-import albumentations as A
 from PIL import Image
-import cv2
+import torchvision.transforms as T
 
 # Import project modules
 from src.utils.utils import get_transforms
@@ -64,8 +63,7 @@ def visualize_augmentations():
     train_transforms_224 = get_transforms("train", MEAN, STD, 224)
     
     for idx in range(1, 5):
-        transformed = train_transforms_224(image=image_np)
-        img_tensor = transformed['image']
+        img_tensor = train_transforms_224(image)
         
         # Denormalize for visualization
         img_display = img_tensor.permute(1, 2, 0).numpy()
@@ -80,8 +78,7 @@ def visualize_augmentations():
     train_transforms_288 = get_transforms("train", MEAN, STD, 288)
     
     for idx in range(5):
-        transformed = train_transforms_288(image=image_np)
-        img_tensor = transformed['image']
+        img_tensor = train_transforms_288(image)
         
         # Denormalize for visualization
         img_display = img_tensor.permute(1, 2, 0).numpy()
@@ -97,8 +94,7 @@ def visualize_augmentations():
     
     # FixRes should be deterministic, so all should be same
     for idx in range(5):
-        transformed = fixres_transforms(image=image_np)
-        img_tensor = transformed['image']
+        img_tensor = fixres_transforms(image)
         
         # Denormalize for visualization
         img_display = img_tensor.permute(1, 2, 0).numpy()
@@ -116,8 +112,8 @@ def visualize_augmentations():
     plt.close()
     
     # Verify that FixRes transforms are deterministic
-    fixres_1 = fixres_transforms(image=image_np)['image']
-    fixres_2 = fixres_transforms(image=image_np)['image']
+    fixres_1 = fixres_transforms(image)
+    fixres_2 = fixres_transforms(image)
     
     if torch.equal(fixres_1, fixres_2):
         print("✅ FixRes transforms are deterministic (same output each time)")
@@ -125,8 +121,8 @@ def visualize_augmentations():
         print("⚠️  FixRes transforms vary - they should be deterministic!")
     
     # Verify that train transforms are random
-    train_1 = train_transforms_224(image=image_np)['image']
-    train_2 = train_transforms_224(image=image_np)['image']
+    train_1 = train_transforms_224(image)
+    train_2 = train_transforms_224(image)
     
     if not torch.equal(train_1, train_2):
         print("✅ Train transforms are random (different output each time)")
@@ -415,7 +411,7 @@ def visualize_mixup():
         mixup_kwargs=mixup_kwargs
     )
     
-    if model.mixup_fn is None:
+    if model.mixup_cutmix_fn is None:
         print("⚠️  MixUp is disabled. Skipping visualization.")
         return
     
@@ -444,13 +440,9 @@ def visualize_mixup():
     img1 = Image.open(img1_path).convert('RGB')
     img2 = Image.open(img2_path).convert('RGB')
     
-    img1_np = np.array(img1)
-    img2_np = np.array(img2)
-    
     # Apply transforms (without mixup)
-    compose = A.Compose(transforms)
-    img1_tensor = compose(image=img1_np)['image']
-    img2_tensor = compose(image=img2_np)['image']
+    img1_tensor = transforms(img1)
+    img2_tensor = transforms(img2)
     
     # Create batch
     images_batch = torch.stack([img1_tensor, img2_tensor], dim=0)
@@ -488,7 +480,7 @@ def visualize_mixup():
         col = idx % 5
         
         # Apply MixUp
-        mixed_imgs, mixed_lbls = model.mixup_fn(images_batch.clone(), labels_batch.clone())
+        mixed_imgs, mixed_lbls = model.mixup_cutmix_fn(images_batch.clone(), labels_batch.clone())
         
         # Get the mixed version of first image
         mixed_img = denormalize(mixed_imgs[0])
@@ -519,7 +511,7 @@ def visualize_mixup():
     sample_labels = torch.arange(num_samples) % NUM_CLASSES
     
     # Apply MixUp
-    mixed_imgs, mixed_lbls = model.mixup_fn(sample_images, sample_labels)
+    mixed_imgs, mixed_lbls = model.mixup_cutmix_fn(sample_images, sample_labels)
     
     for idx in range(10):
         row = idx // 5
@@ -569,7 +561,7 @@ def visualize_mixup():
     for _ in range(num_iterations):
         test_imgs = torch.randn(2, 3, 224, 224)
         test_lbls = torch.tensor([0, 1])
-        mixed_imgs, mixed_lbls = model.mixup_fn(test_imgs, test_lbls)
+        mixed_imgs, mixed_lbls = model.mixup_cutmix_fn(test_imgs, test_lbls)
         lambda_val = mixed_lbls[0, 0].item()
         lambda_values.append(lambda_val)
     
@@ -620,6 +612,327 @@ def visualize_mixup():
     print(f"   Lambda std: {lambda_array.std():.3f}")
 
 # ============================================================================
+# 6. Visualize CutMix
+# ============================================================================
+def visualize_cutmix():
+    """Visualize how CutMix cuts and pastes image regions"""
+    print("\n" + "="*80)
+    print("6️⃣  VISUALIZING CUTMIX")
+    print("="*80)
+    
+    from src.models.resnet_module import ResnetLightningModule
+    from timm.data.mixup import Mixup
+    
+    # Create model with CutMix enabled (disable MixUp)
+    cutmix_kwargs = {
+        'mixup_alpha': 0.0,    # Disable MixUp
+        'cutmix_alpha': 1.0,   # Enable CutMix
+        'prob': 1.0,
+        'mode': 'batch',
+        'label_smoothing': 0.1,
+        'num_classes': NUM_CLASSES
+    }
+    
+    model = ResnetLightningModule(
+        learning_rate=LEARNING_RATE,
+        num_classes=NUM_CLASSES,
+        mixup_kwargs=cutmix_kwargs
+    )
+    
+    if model.mixup_cutmix_fn is None:
+        print("⚠️  CutMix is disabled. Skipping visualization.")
+        return
+    
+    # Load two sample images from different classes
+    class_dirs = list(TRAIN_IMG_DIR.glob("*"))[:2]  # Get first 2 classes
+    
+    if len(class_dirs) < 2:
+        print("⚠️  Need at least 2 classes in dataset. Skipping visualization.")
+        return
+    
+    # Get one image from each class
+    img1_path = list(class_dirs[0].glob("*.JPEG"))[0]
+    img2_path = list(class_dirs[1].glob("*.JPEG"))[0]
+    
+    print(f"\n📷 Loading sample images:")
+    print(f"   Image 1: {img1_path.parent.name}/{img1_path.name}")
+    print(f"   Image 2: {img2_path.parent.name}/{img2_path.name}")
+    
+    # Load and preprocess images
+    from src.utils.utils import get_transforms
+    
+    # Get transforms
+    transforms = get_transforms("train", MEAN, STD, 224)
+    
+    # Load images
+    img1 = Image.open(img1_path).convert('RGB')
+    img2 = Image.open(img2_path).convert('RGB')
+    
+    # Apply transforms (without cutmix)
+    img1_tensor = transforms(img1)
+    img2_tensor = transforms(img2)
+    
+    # Create batch
+    images_batch = torch.stack([img1_tensor, img2_tensor], dim=0)
+    labels_batch = torch.tensor([0, 1])  # Different labels
+    
+    # Apply CutMix with different random seeds
+    fig, axes = plt.subplots(3, 5, figsize=(20, 12))
+    fig.suptitle('CutMix Visualization - Cutting and Pasting Image Regions', fontsize=16, fontweight='bold')
+    
+    # Row 1: Original images
+    def denormalize(img_tensor):
+        """Denormalize image for visualization"""
+        img = img_tensor.permute(1, 2, 0).numpy()
+        img = img * np.array(STD) + np.array(MEAN)
+        img = np.clip(img, 0, 1)
+        return img
+    
+    axes[0, 0].imshow(denormalize(img1_tensor))
+    axes[0, 0].set_title('Image A\n(Class 0)', fontweight='bold')
+    axes[0, 0].axis('off')
+    
+    axes[0, 1].imshow(denormalize(img2_tensor))
+    axes[0, 1].set_title('Image B\n(Class 1)', fontweight='bold')
+    axes[0, 1].axis('off')
+    
+    # Hide remaining axes in first row
+    for i in range(2, 5):
+        axes[0, i].axis('off')
+    
+    # Row 2 & 3: CutMix with different random cuts
+    print(f"\n🎨 Generating CutMix examples...")
+    
+    for idx in range(10):
+        row = 1 + (idx // 5)
+        col = idx % 5
+        
+        # Apply CutMix
+        cutmixed_imgs, cutmixed_lbls = model.mixup_cutmix_fn(images_batch.clone(), labels_batch.clone())
+        
+        # Get the cutmixed version of first image
+        cutmixed_img = denormalize(cutmixed_imgs[0])
+        
+        # Get lambda (mixing coefficient) from the label
+        lambda_val = cutmixed_lbls[0, 0].item()  # Proportion of class 0
+        
+        axes[row, col].imshow(cutmixed_img)
+        axes[row, col].set_title(f'λ={lambda_val:.2f}\n({lambda_val*100:.0f}% A, {(1-lambda_val)*100:.0f}% B)', 
+                                fontsize=10)
+        axes[row, col].axis('off')
+    
+    plt.tight_layout()
+    output_path = output_dir / "cutmix_visualization.png"
+    plt.savefig(output_path, dpi=150, bbox_inches='tight')
+    print(f"\n✅ Saved CutMix visualization: {output_path}")
+    plt.close()
+    
+    # Create a second plot showing CutMix statistics
+    print(f"\n📈 Creating CutMix statistics plot...")
+    
+    fig, axes = plt.subplots(1, 2, figsize=(14, 6))
+    
+    # Generate many CutMix samples to show lambda distribution
+    num_iterations = 1000
+    lambda_values = []
+    
+    for _ in range(num_iterations):
+        test_imgs = torch.randn(2, 3, 224, 224)
+        test_lbls = torch.tensor([0, 1])
+        cutmixed_imgs, cutmixed_lbls = model.mixup_cutmix_fn(test_imgs, test_lbls)
+        lambda_val = cutmixed_lbls[0, 0].item()
+        lambda_values.append(lambda_val)
+    
+    # Plot 1: Lambda distribution
+    axes[0].hist(lambda_values, bins=50, color='#FF6B6B', alpha=0.7, edgecolor='black')
+    axes[0].set_xlabel('Lambda (λ)', fontsize=12, fontweight='bold')
+    axes[0].set_ylabel('Frequency', fontsize=12, fontweight='bold')
+    axes[0].set_title(f'CutMix Lambda Distribution\n(Beta({cutmix_kwargs["cutmix_alpha"]}, {cutmix_kwargs["cutmix_alpha"]}) over {num_iterations} samples)', 
+                     fontsize=14, fontweight='bold')
+    axes[0].grid(axis='y', alpha=0.3)
+    axes[0].axvline(0.5, color='red', linestyle='--', label='λ=0.5 (equal mix)')
+    axes[0].legend()
+    
+    # Plot 2: Statistics
+    lambda_array = np.array(lambda_values)
+    stats_text = f"""
+    CutMix Statistics:
+    
+    Alpha Parameter: {cutmix_kwargs['cutmix_alpha']}
+    
+    Lambda Statistics:
+    • Mean: {lambda_array.mean():.3f}
+    • Std Dev: {lambda_array.std():.3f}
+    • Min: {lambda_array.min():.3f}
+    • Max: {lambda_array.max():.3f}
+    • Median: {np.median(lambda_array):.3f}
+    
+    Configuration:
+    • Probability: {cutmix_kwargs['prob']*100:.0f}%
+    • Mode: {cutmix_kwargs['mode']}
+    • Label Smoothing: {cutmix_kwargs['label_smoothing']}
+    
+    How CutMix Works:
+    • Cuts a rectangular region from one image
+    • Pastes it into another image
+    • λ represents the area ratio of the cut
+    • Creates spatial regularization
+    """
+    
+    axes[1].text(0.1, 0.5, stats_text, transform=axes[1].transAxes,
+                fontsize=11, verticalalignment='center',
+                bbox=dict(boxstyle='round', facecolor='lightcoral', alpha=0.5),
+                family='monospace')
+    axes[1].axis('off')
+    
+    plt.tight_layout()
+    output_path = output_dir / "cutmix_statistics.png"
+    plt.savefig(output_path, dpi=150, bbox_inches='tight')
+    print(f"✅ Saved CutMix statistics: {output_path}")
+    plt.close()
+    
+    print(f"\n✅ CutMix visualization complete!")
+    print(f"   Lambda mean: {lambda_array.mean():.3f} (should be ~0.5)")
+    print(f"   Lambda std: {lambda_array.std():.3f}")
+
+# ============================================================================
+# 7. Visualize Cosine Annealing Scheduler
+# ============================================================================
+def visualize_cosine_annealing():
+    """Plot the Cosine Annealing learning rate schedule"""
+    print("\n" + "="*80)
+    print("7️⃣  VISUALIZING COSINE ANNEALING LR SCHEDULE")
+    print("="*80)
+    
+    # Calculate training steps
+    approx_train_samples = 130000  # ImageNet-mini
+    steps_per_epoch = approx_train_samples // BATCH_SIZE
+    total_steps = steps_per_epoch * EPOCHS
+    
+    print(f"\n📊 Training info:")
+    print(f"   Epochs: {EPOCHS}")
+    print(f"   Batch size: {BATCH_SIZE}")
+    print(f"   Steps per epoch: {steps_per_epoch}")
+    print(f"   Total steps: {total_steps}")
+    
+    # Create dummy optimizer
+    dummy_model = torch.nn.Linear(10, 10)
+    optimizer = torch.optim.SGD(
+        dummy_model.parameters(),
+        lr=LEARNING_RATE,
+        momentum=0.9
+    )
+    
+    # Create Cosine Annealing scheduler
+    eta_min = 1e-6
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+        optimizer,
+        T_max=total_steps,
+        eta_min=eta_min
+    )
+    
+    # Collect LR values
+    lr_history = []
+    step_numbers = []
+    
+    for step in range(total_steps):
+        lr_history.append(optimizer.param_groups[0]['lr'])
+        step_numbers.append(step)
+        scheduler.step()
+    
+    # Create comparison plot: Cosine Annealing vs OneCycle
+    fig, axes = plt.subplots(2, 2, figsize=(16, 12))
+    fig.suptitle('Cosine Annealing LR Schedule', fontsize=16, fontweight='bold')
+    
+    # Plot 1: Learning Rate Schedule (epochs)
+    epochs_x = np.array(step_numbers) / steps_per_epoch
+    axes[0, 0].plot(epochs_x, lr_history, linewidth=2, color='#06D6A0')
+    axes[0, 0].set_xlabel('Epoch', fontsize=12, fontweight='bold')
+    axes[0, 0].set_ylabel('Learning Rate', fontsize=12, fontweight='bold')
+    axes[0, 0].set_title('Cosine Annealing Schedule (Full Training)', fontsize=14, fontweight='bold')
+    axes[0, 0].grid(True, alpha=0.3)
+    
+    # Add annotations
+    axes[0, 0].annotate(f'Start LR: {lr_history[0]:.2e}', 
+                xy=(0, lr_history[0]),
+                xytext=(EPOCHS * 0.15, lr_history[0]),
+                fontsize=10,
+                arrowprops=dict(arrowstyle='->', color='black', lw=1.5),
+                bbox=dict(boxstyle='round', facecolor='lightblue', alpha=0.7))
+    
+    axes[0, 0].annotate(f'Final LR: {lr_history[-1]:.2e}', 
+                xy=(EPOCHS, lr_history[-1]),
+                xytext=(EPOCHS * 0.7, lr_history[-1] * 3),
+                fontsize=10,
+                arrowprops=dict(arrowstyle='->', color='black', lw=1.5),
+                bbox=dict(boxstyle='round', facecolor='lightgreen', alpha=0.7))
+    
+    # Plot 2: Learning Rate Schedule (steps) - zoomed to first 25%
+    zoom_steps = total_steps // 4
+    axes[0, 1].plot(step_numbers[:zoom_steps], lr_history[:zoom_steps], linewidth=2, color='#06D6A0')
+    axes[0, 1].set_xlabel('Step', fontsize=12, fontweight='bold')
+    axes[0, 1].set_ylabel('Learning Rate', fontsize=12, fontweight='bold')
+    axes[0, 1].set_title('Cosine Annealing - First 25% of Training', fontsize=14, fontweight='bold')
+    axes[0, 1].grid(True, alpha=0.3)
+    
+    # Plot 3: LR Decay Rate (derivative)
+    lr_changes = np.diff(lr_history)
+    axes[1, 0].plot(epochs_x[:-1], lr_changes, linewidth=1, color='#FF006E', alpha=0.7)
+    axes[1, 0].set_xlabel('Epoch', fontsize=12, fontweight='bold')
+    axes[1, 0].set_ylabel('LR Change per Step', fontsize=12, fontweight='bold')
+    axes[1, 0].set_title('Learning Rate Decay Rate', fontsize=14, fontweight='bold')
+    axes[1, 0].grid(True, alpha=0.3)
+    axes[1, 0].axhline(0, color='black', linestyle='--', alpha=0.3)
+    
+    # Plot 4: Statistics and comparison
+    stats_text = f"""
+    Cosine Annealing Configuration:
+    
+    • Initial LR: {lr_history[0]:.6e}
+    • Final LR: {lr_history[-1]:.6e}
+    • Min LR (eta_min): {eta_min:.6e}
+    • T_max: {total_steps} steps
+    • Reduction Ratio: {lr_history[0] / lr_history[-1]:.1f}x
+    
+    Key Characteristics:
+    ✓ Smooth, monotonic decrease
+    ✓ Follows cosine curve
+    ✓ No warmup phase
+    ✓ Starts at max LR immediately
+    ✓ Ends at eta_min
+    
+    LR at Progress Points:
+    • 25%: {lr_history[len(lr_history)//4]:.6e}
+    • 50%: {lr_history[len(lr_history)//2]:.6e}
+    • 75%: {lr_history[3*len(lr_history)//4]:.6e}
+    
+    Comparison to OneCycle:
+    • Cosine: Monotonic decrease
+    • OneCycle: Warmup then anneal
+    • Cosine: Simpler, more stable
+    • OneCycle: More aggressive
+    """
+    
+    axes[1, 1].text(0.05, 0.5, stats_text, transform=axes[1, 1].transAxes,
+                fontsize=10, verticalalignment='center',
+                bbox=dict(boxstyle='round', facecolor='lightgreen', alpha=0.5),
+                family='monospace')
+    axes[1, 1].axis('off')
+    
+    plt.tight_layout()
+    output_path = output_dir / "cosine_annealing_schedule.png"
+    plt.savefig(output_path, dpi=150, bbox_inches='tight')
+    print(f"\n✅ Saved Cosine Annealing schedule plot: {output_path}")
+    plt.close()
+    
+    # Print key statistics
+    print(f"\n📈 Cosine Annealing Statistics:")
+    print(f"   Initial LR: {lr_history[0]:.6e}")
+    print(f"   Final LR: {lr_history[-1]:.6e}")
+    print(f"   LR Reduction: {lr_history[0] / lr_history[-1]:.1f}x")
+    print(f"   Max LR change per step: {max(abs(x) for x in lr_changes):.8e}")
+
+# ============================================================================
 # MAIN
 # ============================================================================
 def main():
@@ -650,6 +963,16 @@ def main():
     except Exception as e:
         print(f"❌ Error in MixUp visualization: {e}")
     
+    try:
+        visualize_cutmix()
+    except Exception as e:
+        print(f"❌ Error in CutMix visualization: {e}")
+    
+    try:
+        visualize_cosine_annealing()
+    except Exception as e:
+        print(f"❌ Error in Cosine Annealing visualization: {e}")
+    
     print("\n" + "="*80)
     print("✅ VISUAL VERIFICATION COMPLETE!")
     print("="*80)
@@ -661,6 +984,9 @@ def main():
     print(f"   - mixup_visualization.png: See how MixUp mixes images")
     print(f"   - mixup_labels.png: See soft label distributions")
     print(f"   - mixup_statistics.png: Lambda distribution and statistics")
+    print(f"   - cutmix_visualization.png: See how CutMix cuts and pastes regions")
+    print(f"   - cutmix_statistics.png: CutMix lambda distribution and statistics")
+    print(f"   - cosine_annealing_schedule.png: Cosine Annealing LR schedule")
     print("\n💡 Review these plots to ensure everything is configured correctly!")
     print("="*80)
 

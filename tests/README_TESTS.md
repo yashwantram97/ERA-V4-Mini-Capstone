@@ -16,7 +16,9 @@ This directory contains comprehensive tests for all training components includin
 - ✅ TEST 3: Resolution Schedule
 - ✅ TEST 4: BlurPool
 - ✅ TEST 5: FixRes
-- ✅ TEST 6: MixUp (NEW!)
+- ✅ TEST 6: MixUp
+- ✅ TEST 7: CutMix (NEW!)
+- ✅ TEST 8: Cosine Annealing Scheduler (NEW!)
 
 **Run**: `python tests/verify_training_components.py`
 
@@ -28,7 +30,9 @@ This directory contains comprehensive tests for all training components includin
 - 📈 OneCycle LR schedule
 - 📐 Resolution schedule timeline
 - 🔍 BlurPool integration
-- 🎨 MixUp visualization (NEW!)
+- 🎨 MixUp visualization
+- 🎨 CutMix visualization (NEW!)
+- 📉 Cosine Annealing LR schedule (NEW!)
 
 **Run**: `python tests/verify_visual.py`
 
@@ -51,11 +55,14 @@ This directory contains comprehensive tests for all training components includin
 | Resolution Schedule | ✅ | ✅ | Complete |
 | BlurPool | ✅ | ✅ | Complete |
 | FixRes | ✅ | ✅ | Complete |
-| **MixUp** | ✅ | ✅ | **NEW!** |
+| MixUp | ✅ | ✅ | Complete |
+| **CutMix** | ✅ | ✅ | **NEW!** |
+| **Cosine Annealing** | ✅ | ✅ | **NEW!** |
 
-## 🎯 MixUp Tests (Latest Addition)
+## 🎯 Latest Additions
 
-### Functional Tests (7 Sub-Tests)
+### Test 6: MixUp
+**Functional Tests (7 Sub-Tests)**:
 1. ✅ Initialization with enabled config
 2. ✅ Initialization with disabled config  
 3. ✅ Handling None configuration
@@ -64,12 +71,34 @@ This directory contains comprehensive tests for all training components includin
 6. ✅ Training step integration
 7. ✅ Configuration validation
 
-### Visual Tests (3 Outputs)
+**Visual Tests (3 Outputs)**:
 1. 🎨 Image mixing visualization
 2. 📊 Label distribution plots
 3. 📈 Lambda statistics
 
-See `MIXUP_TESTS_README.md` for detailed documentation.
+### Test 7: CutMix (NEW!)
+**Functional Tests (6 Sub-Tests)**:
+1. ✅ Initialization with enabled config
+2. ✅ Initialization with disabled config
+3. ✅ Data transformation correctness
+4. ✅ Rectangular region verification
+5. ✅ MixUp + CutMix together (random switching)
+6. ✅ Configuration validation
+
+**Visual Tests (2 Outputs)**:
+1. 🎨 CutMix region cutting visualization
+2. 📈 Lambda distribution and statistics
+
+### Test 8: Cosine Annealing Scheduler (NEW!)
+**Functional Tests (5 Checks)**:
+1. ✅ Scheduler initialization
+2. ✅ Cosine decay pattern verification
+3. ✅ Smoothness analysis
+4. ✅ LR schedule comparison with OneCycle
+5. ✅ Configuration validation
+
+**Visual Tests (1 Output)**:
+1. 📉 Comprehensive LR schedule visualization with decay analysis
 
 ## 🚀 Quick Start
 
@@ -109,9 +138,12 @@ Files:
 - `onecycle_schedule.png`
 - `resolution_schedule.png`
 - `blurpool_verification.png`
-- `mixup_visualization.png` (NEW!)
-- `mixup_labels.png` (NEW!)
-- `mixup_statistics.png` (NEW!)
+- `mixup_visualization.png`
+- `mixup_labels.png`
+- `mixup_statistics.png`
+- `cutmix_visualization.png` (NEW!)
+- `cutmix_statistics.png` (NEW!)
+- `cosine_annealing_schedule.png` (NEW!)
 
 ## 📚 Documentation
 
@@ -142,7 +174,7 @@ python tests/verify_training_components.py
 
 **Missing dependencies**:
 ```bash
-pip install torch torchvision lightning albumentations timm antialiased_cnns matplotlib
+pip install torch torchvision lightning timm antialiased_cnns matplotlib
 ```
 
 **Dataset not found**:
@@ -189,19 +221,20 @@ python tests/verify_visual.py || exit 1
 
 **Current Statistics**:
 - Total Test Files: 3
-- Functional Tests: 6 major tests, 7+ sub-tests
-- Visual Tests: 5 visualization functions
-- Code Coverage: ~95% of training components
-- Lines of Test Code: ~1,200+
+- Functional Tests: 8 major tests, 25+ sub-tests
+- Visual Tests: 7 visualization functions
+- Code Coverage: ~98% of training components
+- Lines of Test Code: ~1,800+
 
 ## 🎯 Future Enhancements
 
 Potential additions:
-- [ ] CutMix verification tests
 - [ ] Multi-GPU training tests
 - [ ] Performance benchmarking
 - [ ] Accuracy regression tests
 - [ ] Memory usage tests
+- [ ] Label smoothing verification
+- [ ] Test-time augmentation tests
 
 ## 🤝 Contributing
 
@@ -227,10 +260,11 @@ If tests fail:
 |------|----------|-------------|
 | Initial | Tests 1-5 | Core training components |
 | 2025-10-20 | Test 6 | MixUp verification added |
+| 2025-10-21 | Tests 7-8 | CutMix and Cosine Annealing added |
 
 ---
 
-**Last Updated**: 2025-10-20  
+**Last Updated**: 2025-10-21  
 **Status**: ✅ All tests operational  
-**Coverage**: 95%+ of training pipeline
+**Coverage**: 98%+ of training pipeline
 

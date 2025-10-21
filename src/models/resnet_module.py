@@ -56,10 +56,10 @@ class ResnetLightningModule(L.LightningModule):
         # Store transforms for hyperparameter logging
         self.train_transforms = train_transforms
         
-        # Initialize MixUp if enabled
-        self.mixup_fn = None
-        if mixup_kwargs is not None and mixup_kwargs.get('mixup_alpha', 0.0) > 0:
-            self.mixup_fn = Mixup(
+        # Initialize MixUp/CutMix if enabled
+        self.mixup_cutmix_fn = None
+        if mixup_kwargs is not None and (mixup_kwargs.get('mixup_alpha', 0.0) > 0 or mixup_kwargs.get('cutmix_alpha', 0.0) > 0):
+            self.mixup_cutmix_fn = Mixup(
                 mixup_alpha=mixup_kwargs.get('mixup_alpha', 0.0),
                 cutmix_alpha=mixup_kwargs.get('cutmix_alpha', 0.0),
                 cutmix_minmax=mixup_kwargs.get('cutmix_minmax', None),
@@ -69,9 +69,19 @@ class ResnetLightningModule(L.LightningModule):
                 label_smoothing=mixup_kwargs.get('label_smoothing', 0.1),
                 num_classes=num_classes
             )
-            print(f"✅ MixUp enabled with alpha={mixup_kwargs.get('mixup_alpha', 0.0)}")
+            
+            # Print what's enabled
+            mixup_alpha = mixup_kwargs.get('mixup_alpha', 0.0)
+            cutmix_alpha = mixup_kwargs.get('cutmix_alpha', 0.0)
+            
+            if mixup_alpha > 0 and cutmix_alpha > 0:
+                print(f"✅ MixUp (α={mixup_alpha}) + CutMix (α={cutmix_alpha}) enabled")
+            elif mixup_alpha > 0:
+                print(f"✅ MixUp enabled with alpha={mixup_alpha}")
+            elif cutmix_alpha > 0:
+                print(f"✅ CutMix enabled with alpha={cutmix_alpha}")
         else:
-            print("ℹ️  MixUp disabled (set mixup_alpha > 0 to enable)")
+            print("ℹ️  MixUp/CutMix disabled (set mixup_alpha > 0 or cutmix_alpha > 0 to enable)")
 
         # We'll create a custom dict to include serialized transforms
         hparams_dict = {
@@ -117,8 +127,8 @@ class ResnetLightningModule(L.LightningModule):
         images, labels = batch
         
         # Apply MixUp if enabled (before forward pass)
-        if self.mixup_fn is not None:
-            images, labels = self.mixup_fn(images, labels)
+        if self.mixup_cutmix_fn is not None:
+            images, labels = self.mixup_cutmix_fn(images, labels)
         
         # Forward pass
         logits = self(images) # Automatically calls self.forward(images)
@@ -126,7 +136,7 @@ class ResnetLightningModule(L.LightningModule):
         # Compute loss
         # Note: When MixUp is enabled, labels are soft (one-hot encoded)
         # F.cross_entropy handles both hard labels (class indices) and soft labels (probabilities)
-        if self.mixup_fn is not None:
+        if self.mixup_cutmix_fn is not None:
             # Soft labels from MixUp - no label smoothing needed (already done by Mixup)
             loss = F.cross_entropy(logits, labels)
         else:
@@ -134,7 +144,7 @@ class ResnetLightningModule(L.LightningModule):
             loss = F.cross_entropy(logits, labels, label_smoothing=0.1)
         
         # Update metrics (convert soft labels back to hard labels for accuracy calculation)
-        if self.mixup_fn is not None:
+        if self.mixup_cutmix_fn is not None:
             # For soft labels, take argmax to get predicted class
             labels_for_metrics = labels.argmax(dim=1)
         else:
