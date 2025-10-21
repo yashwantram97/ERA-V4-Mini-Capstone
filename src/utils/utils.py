@@ -20,6 +20,7 @@ def get_transforms(transform_type="train", mean=None, std=None, resolution=224):
     IMAGENET_MEAN_VALUES = (int(mean[0] * 255), int(mean[1] * 255), int(mean[2] * 255))
     
     if transform_type == "train":
+        # REVISED: Stronger augmentation to reduce overfitting
         transforms = A.Compose([
             A.RandomResizedCrop(
                 size=[resolution, resolution],
@@ -28,17 +29,25 @@ def get_transforms(transform_type="train", mean=None, std=None, resolution=224):
                 interpolation=cv2.INTER_LINEAR
             ),
             A.HorizontalFlip(p=0.5),
+            # Stronger color augmentation
             A.OneOf([
-                A.RandomBrightnessContrast(brightness_limit=0.2, contrast_limit=0.2, p=1.0),
-                A.HueSaturationValue(hue_shift_limit=10, sat_shift_limit=30, val_shift_limit=20, p=1.0)
-            ], p=0.5),
+                A.RandomBrightnessContrast(brightness_limit=0.3, contrast_limit=0.3, p=1.0),  # Increased from 0.2
+                A.HueSaturationValue(hue_shift_limit=15, sat_shift_limit=40, val_shift_limit=30, p=1.0),  # Increased
+                A.ColorJitter(brightness=0.3, contrast=0.3, saturation=0.3, hue=0.1, p=1.0),  # Added
+            ], p=0.7),  # Increased from 0.5
+            # Stronger spatial dropout
             A.CoarseDropout(
-                num_holes_range=(1, 1),  # Number of holes to drop
-                hole_height_range=(int(resolution * 0.1), int(resolution * 0.25)),  # 10-25% of image height
-                hole_width_range=(int(resolution * 0.1), int(resolution * 0.25)),   # 10-25% of image width
+                num_holes_range=(1, 3),  # Increased from (1, 1) - can drop multiple patches
+                hole_height_range=(int(resolution * 0.1), int(resolution * 0.3)),  # Increased max from 0.25 to 0.3
+                hole_width_range=(int(resolution * 0.1), int(resolution * 0.3)),   # Increased max from 0.25 to 0.3
                 fill=IMAGENET_MEAN_VALUES,  # ImageNet mean in RGB pixel values (0-255)
-                p=0.5
+                p=0.7  # Increased from 0.5
             ),
+            # Additional blur augmentation for regularization
+            A.OneOf([
+                A.GaussianBlur(blur_limit=(3, 5), p=1.0),
+                A.MotionBlur(blur_limit=5, p=1.0),
+            ], p=0.2),  # Apply blur 20% of the time
             A.Normalize(mean=mean, std=std),
             ToTensorV2(),
         ])
