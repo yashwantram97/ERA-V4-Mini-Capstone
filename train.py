@@ -26,11 +26,12 @@ from lightning.pytorch.loggers import TensorBoardLogger
 from pathlib import Path
 
 # Import our Lightning components
-from src.utils.utils import get_relative_path, get_batch_size_from_resolution_schedule, get_total_num_steps
+from src.utils.utils import get_relative_path
 from src.data_modules.imagenet_datamodule import ImageNetDataModule
 from src.models.resnet_module import ResnetLightningModule
 from src.callbacks.text_logging_callback import TextLoggingCallback
 from src.callbacks.resolution_schedule_callback import ResolutionScheduleCallback
+from lightning.pytorch.utilities import rank_zero_only
 
 # Import new config system
 from configs import get_config, list_configs, ConfigProfile
@@ -38,7 +39,6 @@ from configs import get_config, list_configs, ConfigProfile
 def train_with_lightning(
     config: ConfigProfile,
     resume_from_checkpoint: str = None,
-    use_sam: bool = False,
 ):
     """
     Train ImageNet dataset on ResNet50 using PyTorch Lightning
@@ -46,7 +46,6 @@ def train_with_lightning(
     Args:
         config: ConfigProfile object with all training settings
         resume_from_checkpoint: Path to checkpoint to resume training from where it stopped
-        use_sam: Whether to use SAM optimizer
     """
     print("🌩️ Starting PyTorch Lightning Training")
     print("=" * 60)
@@ -55,7 +54,6 @@ def train_with_lightning(
     # Determine initial resolution from schedule or use default
     initial_resolution = 224
     use_train_augs = True
-    batch_size = config.batch_size
     
     if config.prog_resizing_fixres_schedule:
         # Get the config for epoch 0 (or first epoch in schedule)
@@ -63,8 +61,6 @@ def train_with_lightning(
         schedule_config = config.prog_resizing_fixres_schedule[first_epoch]
         initial_resolution = schedule_config[0]
         use_train_augs = schedule_config[1]
-        if len(schedule_config) > 2:
-            batch_size = schedule_config[2]  # Override batch size if specified
     
     # 1. Create DataModule
     # DataModule handles all data operations
@@ -74,34 +70,17 @@ def train_with_lightning(
         val_img_dir=config.val_img_dir,
         mean=config.mean,
         std=config.std,
-        batch_size=batch_size,
+        batch_size=config.batch_size,
         num_workers=config.num_workers,
         initial_resolution=initial_resolution,
         use_train_augs=use_train_augs
     )
 
-    # IMPORTANT: Recalculate total_steps based on actual resolution schedule being used
-    # This ensures OneCycleLR has the correct total steps
-    if config.prog_resizing_fixres_schedule and config.dynamic_batch_size:
-        # Calculate based on dynamic batch size from resolution schedule
-        actual_batch_size_schedule = get_batch_size_from_resolution_schedule(
-            config.prog_resizing_fixres_schedule, 
-            config.epochs
-        )
-        actual_total_steps = get_total_num_steps(
-            config.dataset_size, 
-            config.batch_size, 
-            actual_batch_size_schedule, 
-            config.epochs, 
-            config.dynamic_batch_size
-        )
-        print(f"📊 Calculated total_steps for OneCycleLR: {actual_total_steps:,}")
-        print(f"   Resolution schedule: {len(config.prog_resizing_fixres_schedule)} transitions")
-        print(f"   Batch sizes used: {set(bs for bs in actual_batch_size_schedule if bs)}")
-    else:
-        # Fixed batch size - simple calculation
-        actual_total_steps = config.epochs * ((config.dataset_size + config.batch_size - 1) // config.batch_size)
-        print(f"📊 Calculated total_steps (fixed BS={config.batch_size}): {actual_total_steps:,}")
+    # Calculate total_steps for OneCycleLR scheduler
+    # Using fixed batch size throughout training
+    # actual_total_steps = config.epochs * ((config.dataset_size + config.batch_size - 1) // config.batch_size)
+    # print(f"📊 Calculated total_steps for OneCycleLR: {actual_total_steps:,}")
+    # print(f"   Epochs: {config.epochs}, Batch Size: {config.batch_size}, Dataset Size: {config.dataset_size:,}")
     
     # 2. Create Lightning Module (Model)
     print("🧠 Setting up model...")
@@ -109,8 +88,8 @@ def train_with_lightning(
         learning_rate=config.learning_rate,
         weight_decay=config.weight_decay,
         num_classes=config.num_classes,
-        total_steps=actual_total_steps,
-        use_sam=use_sam
+        # total_steps=actual_total_steps,
+        mixup_kwargs=config.mixup_kwargs
     )
     
     # 3. Setup Callbacks
@@ -200,17 +179,21 @@ def train_with_lightning(
 
     # Automatic checkpoint detection for resuming training
     if resume_from_checkpoint is None:
-        # Try to find last checkpoint automatically
-        # Convert string to Path object before calling mkdir
-        Path(checkpoint_callback.dirpath).mkdir(parents=True, exist_ok=True)
+        # Try to find last checkpoint automatically (only create dir on rank 0 to avoid race condition)
+        if trainer.is_global_zero:
+            Path(checkpoint_callback.dirpath).mkdir(parents=True, exist_ok=True)
+        
         last_ckpt = Path(checkpoint_callback.dirpath) / "last.ckpt"
         if last_ckpt.exists():
             resume_from_checkpoint = str(last_ckpt)
-            print(f"🔄 Found existing checkpoint, resuming from: {get_relative_path(resume_from_checkpoint)}")
+            if trainer.is_global_zero:
+                print(f"🔄 Found existing checkpoint, resuming from: {get_relative_path(resume_from_checkpoint)}")
         else:
-            print("🆕 No checkpoint found, starting fresh training")
+            if trainer.is_global_zero:
+                print("🆕 No checkpoint found, starting fresh training")
     else:
-        print(f"🔄 Resuming from specified checkpoint: {get_relative_path(resume_from_checkpoint)}")
+        if trainer.is_global_zero:
+            print(f"🔄 Resuming from specified checkpoint: {get_relative_path(resume_from_checkpoint)}")
     
     print("=" * 60)
 
@@ -242,8 +225,8 @@ Examples:
   # Train on AWS g5.12xlarge
   python train.py --config g5
   
-  # Train on AWS p3.16xlarge with SAM optimizer
-  python train.py --config p3 --use-sam
+  # Train on AWS p3.16xlarge
+  python train.py --config p3
   
   # Custom learning rate
   python train.py --config g5 --lr 0.001
@@ -269,12 +252,6 @@ Examples:
         type=str,
         default=None,
         help='Path to checkpoint to resume training from'
-    )
-    
-    parser.add_argument(
-        '--use-sam',
-        action='store_true',
-        help='Use SAM optimizer instead of AdamW'
     )
     
     parser.add_argument(
@@ -316,8 +293,7 @@ Examples:
     # Start training
     train_with_lightning(
         config=config,
-        resume_from_checkpoint=args.resume,
-        use_sam=args.use_sam
+        resume_from_checkpoint=args.resume
     )
     
     print("\n🎯 To view training progress:")

@@ -1,27 +1,48 @@
 """
-Learning Rate Finder Script
+Robust Learning Rate Finder - Run Multiple Times
 
-Finds optimal learning rate for training using the LR range test.
+This script runs the LR finder multiple times and provides statistics
+to help you choose a more reliable learning rate.
+
+⚠️  IMPORTANT: This script runs on SINGLE GPU/CPU only (not distributed).
+For multi-GPU configs (g5, p3), the batch size is automatically scaled down
+to prevent OOM errors.
 
 Usage:
-    python find_lr.py --config local
-    python find_lr.py --config g5
-    python find_lr.py --config p3
+    # Local development (M4 Pro)
+    python find_lr.py --config local --runs 3
+    
+    # AWS g5.12xlarge (auto-scales from 256 to 64 per GPU)
+    python find_lr.py --config g5 --runs 3
+    
+    # AWS p3.16xlarge (auto-scales from 256 to 32 per GPU)
+    python find_lr.py --config p3 --runs 3
+    
+    # Manual batch size override (if still getting OOM)
+    python find_lr.py --config g5 --runs 3 --batch-size 32
+
+Memory Requirements:
+    - Local (batch=64):  ~4-6 GB (MPS/CPU)
+    - G5 (batch=64):     ~4-6 GB (single A10G)
+    - P3 (batch=32):     ~2-4 GB (single V100)
 """
 
 import argparse
+import numpy as np
 import torch
 import torch.nn.functional as F
 from src.utils.lr_finder_utils import run_lr_finder
 from src.utils.utils import get_transforms
 from src.data_modules.imagenet_datamodule import ImageNetDataModule
 from src.models.resnet_module import ResnetLightningModule
-from configs import get_config, list_configs
+from configs import get_config
+import matplotlib.pyplot as plt
+from pathlib import Path
 
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Find optimal learning rate for your hardware configuration"
+        description="Run LR finder multiple times for robust results"
     )
     parser.add_argument(
         '--config',
@@ -31,99 +52,279 @@ def main():
         help='Hardware configuration profile (default: local)'
     )
     parser.add_argument(
-        '--lr', '--learning-rate',
-        type=float,
-        default=None,
-        dest='learning_rate',
-        help='Starting learning rate (overrides config value if provided)'
+        '--runs',
+        type=int,
+        default=3,
+        help='Number of times to run LR finder (default: 3)'
     )
-    
     parser.add_argument(
-        '--list-configs',
-        action='store_true',
-        help='List available configuration profiles and exit'
+        '--batch-size',
+        type=int,
+        default=None,
+        help='Override batch size for LR finder (default: auto-detect from config)'
     )
     
     args = parser.parse_args()
     
-    # List configs if requested
-    if args.list_configs:
-        print("\n" + "=" * 70)
-        print("Available Hardware Configuration Profiles")
-        print("=" * 70)
-        configs = list_configs()
-        for name, description in configs.items():
-            print(f"\n📋 {name:10s} - {description}")
-        print("\n" + "=" * 70)
-        return
-    
     # Load configuration
     print(f"\n🔧 Loading configuration: {args.config}")
     config = get_config(args.config)
-    
-    # Override learning rate if provided via command line
-    if args.learning_rate is not None:
-        print(f"⚡ Overriding learning rate: {config.learning_rate:.2e} → {args.learning_rate:.2e}")
-        config.learning_rate = args.learning_rate
-    
     print(config)
     
-    # Setup transforms
+    # ⚠️  IMPORTANT: LR Finder runs on SINGLE GPU only
+    # Scale down batch size for multi-GPU configs to prevent OOM
+    if args.batch_size is not None:
+        # User manually specified batch size
+        lr_finder_batch_size = args.batch_size
+        print(f"\n🔧 Manual batch size override: {lr_finder_batch_size}")
+    elif hasattr(config, 'num_devices') and config.num_devices > 1:
+        # Multi-GPU config detected - scale down to per-GPU batch size
+        lr_finder_batch_size = config.batch_size // config.num_devices
+        print(f"\n⚠️  Multi-GPU config detected ({config.num_devices} devices)")
+        print(f"   Original batch size: {config.batch_size}")
+        print(f"   LR Finder batch size (single GPU): {lr_finder_batch_size}")
+        print(f"   This prevents OOM on single GPU during LR finding")
+    else:
+        lr_finder_batch_size = config.batch_size
+        print(f"\n✅ Single GPU/CPU config - using full batch size: {lr_finder_batch_size}")
+    
+    # Setup
     train_transforms = get_transforms(transform_type="train", mean=config.mean, std=config.std)
-
-    # Setup data module
     imagenet_dm = ImageNetDataModule(
         train_img_dir=config.train_img_dir,
         val_img_dir=config.val_img_dir,
         mean=config.mean,
         std=config.std,
-        batch_size=config.batch_size,
+        batch_size=lr_finder_batch_size,  # Use scaled batch size
         num_workers=config.num_workers,
         pin_memory=True
     )
-
-
     imagenet_dm.setup(stage='fit')
-
     experiment_dir = config.logs_dir / config.experiment_name
-
-    # Instantiate the Lightning module to get the torch model
-    lit_module = ResnetLightningModule(
-        learning_rate=config.learning_rate,
-        weight_decay=config.weight_decay,
-        num_classes=config.num_classes,
-        train_transforms=train_transforms
-    )
-    model = lit_module.model
-
-    train_loader = imagenet_dm.train_dataloader()
-    loss_fn = F.cross_entropy
-    optimizer = torch.optim.SGD(
-        model.parameters(), 
-        lr=config.learning_rate, 
-        weight_decay=config.weight_decay, 
-        momentum=0.9
-    )
-
-    print("\n🔍 Starting LR Finder...")
-    print(f"   Range: {config.lr_finder_kwargs['start_lr']:.2e} to {config.lr_finder_kwargs['end_lr']:.2e}")
-    print(f"   Iterations: {config.lr_finder_kwargs['num_iter']}")
-    print(f"   Number of classes: {config.num_classes}")
     
-    suggested_lr = run_lr_finder(
-        model,
-        train_loader,
-        loss_fn,
-        optimizer,
-        **config.lr_finder_kwargs,
-        save_path=experiment_dir / "lr_finder.png",
-        logger=None
-    )
+    # Check available GPU memory if using CUDA
+    if torch.cuda.is_available():
+        gpu_name = torch.cuda.get_device_name(0)
+        gpu_memory_gb = torch.cuda.get_device_properties(0).total_memory / 1e9
+        print(f"\n🎮 GPU Information:")
+        print(f"   Device: {gpu_name}")
+        print(f"   Memory: {gpu_memory_gb:.1f} GB")
+        print(f"   Batch size: {lr_finder_batch_size}")
+        
+        # Estimate memory requirement
+        estimated_memory_gb = (lr_finder_batch_size * 3 * 224 * 224 * 4) / 1e9 * 10  # Rough estimate
+        print(f"   Estimated memory usage: ~{estimated_memory_gb:.1f} GB")
+        
+        if estimated_memory_gb > gpu_memory_gb * 0.9:
+            print(f"   ⚠️  WARNING: May run out of memory!")
+            print(f"   💡 Consider reducing batch size if OOM occurs")
+    
+    # Run multiple times
+    suggested_lrs = []
+    
+    print("\n" + "="*80)
+    print(f"🚀 RUNNING LR FINDER {args.runs} TIMES FOR ROBUST RESULTS")
+    print("="*80)
+    print(f"\n📊 Configuration:")
+    print(f"   Range: {config.lr_finder_kwargs['start_lr']:.2e} to {config.lr_finder_kwargs['end_lr']:.2e}")
+    print(f"   Iterations per run: {config.lr_finder_kwargs['num_iter']}")
+    print(f"   Number of runs: {args.runs}")
+    print(f"   Total iterations: {config.lr_finder_kwargs['num_iter'] * args.runs}")
+    print(f"   Batch size: {lr_finder_batch_size}")
+    
+    for run_num in range(1, args.runs + 1):
+        print(f"\n{'='*80}")
+        print(f"🔄 RUN {run_num}/{args.runs}")
+        print(f"{'='*80}")
+        
+        # Create fresh model and optimizer for each run
+        lit_module = ResnetLightningModule(
+            learning_rate=config.learning_rate,
+            weight_decay=config.weight_decay,
+            num_classes=config.num_classes,
+            train_transforms=train_transforms
+        )
+        model = lit_module.model
+        
+        train_loader = imagenet_dm.train_dataloader()
+        loss_fn = F.cross_entropy
+        optimizer = torch.optim.SGD(
+            model.parameters(), 
+            lr=config.learning_rate, 
+            weight_decay=config.weight_decay, 
+            momentum=0.9
+        )
+        
+        # Run LR finder
+        save_path = experiment_dir / f"lr_finder_run{run_num}.png"
+        suggested_lr = run_lr_finder(
+            model,
+            train_loader,
+            loss_fn,
+            optimizer,
+            **config.lr_finder_kwargs,
+            save_path=save_path,
+            logger=None
+        )
+        
+        suggested_lrs.append(suggested_lr)
+        print(f"✅ Run {run_num} suggested LR: {suggested_lr:.2e}")
+        
+        # Clean up
+        del model, optimizer, lit_module
+        torch.cuda.empty_cache() if torch.cuda.is_available() else None
+    
+    # Calculate statistics
+    suggested_lrs = np.array(suggested_lrs)
+    
+    # Compute statistics
+    mean_lr = np.mean(suggested_lrs)
+    median_lr = np.median(suggested_lrs)
+    std_lr = np.std(suggested_lrs)
+    min_lr = np.min(suggested_lrs)
+    max_lr = np.max(suggested_lrs)
+    geom_mean_lr = np.exp(np.mean(np.log(suggested_lrs)))
+    
+    # Coefficient of variation (relative std dev)
+    cv = std_lr / mean_lr
+    
+    # Print results
+    print("\n" + "="*80)
+    print("📊 STATISTICAL ANALYSIS OF LR FINDER RESULTS")
+    print("="*80)
+    
+    print(f"\n📈 All Suggested Learning Rates:")
+    for i, lr in enumerate(suggested_lrs, 1):
+        print(f"   Run {i}: {lr:.4e}")
+    
+    print(f"\n📊 Statistics:")
+    print(f"   Mean (arithmetic):     {mean_lr:.4e}")
+    print(f"   Median:                {median_lr:.4e}")
+    print(f"   Geometric Mean:        {geom_mean_lr:.4e}  ⭐ RECOMMENDED")
+    print(f"   Std Deviation:         {std_lr:.4e}")
+    print(f"   Coefficient of Var:    {cv:.2%}")
+    print(f"   Min:                   {min_lr:.4e}")
+    print(f"   Max:                   {max_lr:.4e}")
+    print(f"   Range (max/min):       {max_lr/min_lr:.2f}x")
+    
+    # Interpretation
+    print(f"\n🎯 Interpretation:")
+    if cv < 0.3:
+        print(f"   ✅ Low variation ({cv:.1%}) - Results are very consistent")
+        confidence = "HIGH"
+    elif cv < 0.5:
+        print(f"   ✅ Moderate variation ({cv:.1%}) - Results are reasonably consistent")
+        confidence = "MEDIUM"
+    else:
+        print(f"   ⚠️  High variation ({cv:.1%}) - Consider running more iterations")
+        confidence = "LOW"
+    
+    print(f"   Confidence Level: {confidence}")
+    
+    # Recommendations
+    print(f"\n💡 RECOMMENDATIONS:")
+    print(f"   ")
+    print(f"   1. 🥇 Best Choice (Geometric Mean):")
+    print(f"      LEARNING_RATE = {geom_mean_lr:.4e}")
+    print(f"      → Accounts for exponential nature of learning rates")
+    print(f"      → Less sensitive to outliers")
+    print(f"   ")
+    print(f"   2. 🥈 Conservative Choice (Median):")
+    print(f"      LEARNING_RATE = {median_lr:.4e}")
+    print(f"      → Middle value, robust to outliers")
+    print(f"      → Safer for training stability")
+    print(f"   ")
+    print(f"   3. 🥉 Aggressive Choice (75th percentile):")
+    percentile_75 = np.percentile(suggested_lrs, 75)
+    print(f"      LEARNING_RATE = {percentile_75:.4e}")
+    print(f"      → Higher LR for faster convergence")
+    print(f"      → Monitor for instability")
+    print(f"   ")
+    print(f"   4. 🛡️  Safe Range:")
+    print(f"      MIN: {median_lr * 0.5:.4e}  (50% of median)")
+    print(f"      MAX: {median_lr * 2.0:.4e}  (200% of median)")
+    
+    # Create visualization
+    create_summary_plot(suggested_lrs, geom_mean_lr, median_lr, experiment_dir)
+    
+    print(f"\n📊 Individual run plots saved to:")
+    for i in range(1, args.runs + 1):
+        print(f"   {experiment_dir / f'lr_finder_run{i}.png'}")
+    print(f"\n📊 Summary plot saved to:")
+    print(f"   {experiment_dir / 'lr_finder_summary.png'}")
+    
+    print("\n" + "="*80)
+    print("✅ ROBUST LR FINDER COMPLETE!")
+    print("="*80)
+    print(f"\n🎯 RECOMMENDED LEARNING RATE: {geom_mean_lr:.4e}")
+    print(f"\n💡 Update your config file:")
+    print(f"   LEARNING_RATE = {geom_mean_lr:.4e}")
+    print("="*80)
 
-    print(f"\n✅ Suggested LR: {suggested_lr:.2e}")
-    print(f"📊 Plot saved to: {experiment_dir / 'lr_finder.png'}")
-    print(f"\n💡 Update your config file with this learning rate for optimal training.")
+
+def create_summary_plot(suggested_lrs, geom_mean, median, output_dir):
+    """Create a summary visualization of all runs"""
+    fig, axes = plt.subplots(1, 2, figsize=(14, 6))
+    
+    # Plot 1: Distribution
+    ax1 = axes[0]
+    runs = np.arange(1, len(suggested_lrs) + 1)
+    ax1.plot(runs, suggested_lrs, 'o-', markersize=10, linewidth=2, color='#3A86FF', label='Suggested LR')
+    ax1.axhline(geom_mean, color='red', linestyle='--', linewidth=2, label=f'Geometric Mean: {geom_mean:.2e}')
+    ax1.axhline(median, color='green', linestyle='--', linewidth=2, label=f'Median: {median:.2e}')
+    
+    ax1.set_xlabel('Run Number', fontsize=12, fontweight='bold')
+    ax1.set_ylabel('Suggested Learning Rate', fontsize=12, fontweight='bold')
+    ax1.set_title('LR Finder Results Across Multiple Runs', fontsize=14, fontweight='bold')
+    ax1.set_yscale('log')
+    ax1.grid(True, alpha=0.3)
+    ax1.legend(loc='best', fontsize=10)
+    ax1.set_xticks(runs)
+    
+    # Plot 2: Box plot
+    ax2 = axes[1]
+    bp = ax2.boxplot([suggested_lrs], vert=True, patch_artist=True)
+    bp['boxes'][0].set_facecolor('#4ECDC4')
+    bp['boxes'][0].set_alpha(0.7)
+    
+    # Add scatter points
+    ax2.scatter(np.ones(len(suggested_lrs)), suggested_lrs, 
+               color='darkblue', s=100, alpha=0.6, zorder=3)
+    
+    # Add mean and median lines
+    ax2.axhline(geom_mean, color='red', linestyle='--', linewidth=2, 
+               label=f'Geo Mean: {geom_mean:.2e}')
+    ax2.axhline(median, color='green', linestyle='--', linewidth=2,
+               label=f'Median: {median:.2e}')
+    
+    ax2.set_ylabel('Suggested Learning Rate', fontsize=12, fontweight='bold')
+    ax2.set_title('Distribution of Suggested LRs', fontsize=14, fontweight='bold')
+    ax2.set_yscale('log')
+    ax2.set_xticks([1])
+    ax2.set_xticklabels(['All Runs'])
+    ax2.grid(True, alpha=0.3, axis='y')
+    ax2.legend(loc='best', fontsize=10)
+    
+    # Add statistics text
+    stats_text = f"""
+    Statistics:
+    • Mean: {np.mean(suggested_lrs):.2e}
+    • Median: {median:.2e}
+    • Geo Mean: {geom_mean:.2e}
+    • Std: {np.std(suggested_lrs):.2e}
+    • CV: {np.std(suggested_lrs)/np.mean(suggested_lrs):.1%}
+    • Range: {np.max(suggested_lrs)/np.min(suggested_lrs):.2f}x
+    """
+    
+    fig.text(0.5, -0.05, stats_text, ha='center', fontsize=10,
+            bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5),
+            family='monospace')
+    
+    plt.tight_layout()
+    plt.savefig(output_dir / 'lr_finder_summary.png', dpi=150, bbox_inches='tight')
+    plt.close()
 
 
 if __name__ == "__main__":
     main()
+

@@ -16,19 +16,20 @@ Benefits:
 """
 
 from src.utils.utils import serialize_transforms
-from pytorch_optimizer import SAM
 import lightning as L
 import torch
 import torch.nn.functional as F
 import torchmetrics
-import antialiased_cnns
+from timm.data.mixup import Mixup
 from config import scheduler_type
 import copy
 from torchinfo import summary
+from lightning.pytorch.utilities import rank_zero_only
+import timm
 
 class ResnetLightningModule(L.LightningModule):
     """
-    Lightning wrapper for Cifar100 resnet model
+    Lightning wrapper for ImageNet resnet model
     
     This class defines:
     - Forward pass
@@ -43,19 +44,44 @@ class ResnetLightningModule(L.LightningModule):
         weight_decay: float = 1e-4,
         num_classes: int = 100,
         train_transforms = None,
-        total_steps: int = None,
-        use_sam: bool = False
+        # total_steps: int = None,
+        mixup_kwargs: dict = None
         ):
         super().__init__()
         # Store hyperparameters
         self.learning_rate = learning_rate
         self.weight_decay = weight_decay
         self.num_classes = num_classes
-        self.total_steps = total_steps
+        # self.total_steps = total_steps
         # Store transforms for hyperparameter logging
         self.train_transforms = train_transforms
-
-        self.use_sam = use_sam
+        
+        # Initialize MixUp/CutMix if enabled
+        self.mixup_cutmix_fn = None
+        if mixup_kwargs is not None and (mixup_kwargs.get('mixup_alpha', 0.0) > 0 or mixup_kwargs.get('cutmix_alpha', 0.0) > 0):
+            self.mixup_cutmix_fn = Mixup(
+                mixup_alpha=mixup_kwargs.get('mixup_alpha', 0.0),
+                cutmix_alpha=mixup_kwargs.get('cutmix_alpha', 0.0),
+                cutmix_minmax=mixup_kwargs.get('cutmix_minmax', None),
+                prob=mixup_kwargs.get('prob', 1.0),
+                switch_prob=mixup_kwargs.get('switch_prob', 0.5),
+                mode=mixup_kwargs.get('mode', 'batch'),
+                label_smoothing=mixup_kwargs.get('label_smoothing', 0.1),
+                num_classes=num_classes
+            )
+            
+            # Print what's enabled
+            mixup_alpha = mixup_kwargs.get('mixup_alpha', 0.0)
+            cutmix_alpha = mixup_kwargs.get('cutmix_alpha', 0.0)
+            
+            if mixup_alpha > 0 and cutmix_alpha > 0:
+                print(f"✅ MixUp (α={mixup_alpha}) + CutMix (α={cutmix_alpha}) enabled")
+            elif mixup_alpha > 0:
+                print(f"✅ MixUp enabled with alpha={mixup_alpha}")
+            elif cutmix_alpha > 0:
+                print(f"✅ CutMix enabled with alpha={cutmix_alpha}")
+        else:
+            print("ℹ️  MixUp/CutMix disabled (set mixup_alpha > 0 or cutmix_alpha > 0 to enable)")
 
         # We'll create a custom dict to include serialized transforms
         hparams_dict = {
@@ -74,12 +100,8 @@ class ResnetLightningModule(L.LightningModule):
         # Initialize model
         # self.model = torch.hub.load("pytorch/vision", "resnet50", weights=None)
         # Use antialiased_cnns for implementing Blur Pool
-        if self.num_classes == 100:
-            self.model = antialiased_cnns.resnet50(pretrained=False)
-            self.model.fc = torch.nn.Linear(self.model.fc.in_features, num_classes)
-        else:
-            self.model = antialiased_cnns.resnet50(pretrained=False)
         # Use channels_last memory format for faster training
+        self.model = timm.create_model('resnetblur50', pretrained=False, num_classes=self.num_classes)
         self.model = self.model.to(memory_format=torch.channels_last)
 
         # Initialize metrics for each stage
@@ -104,15 +126,35 @@ class ResnetLightningModule(L.LightningModule):
         """
         images, labels = batch
         
+        # Apply MixUp if enabled (before forward pass)
+        if self.mixup_cutmix_fn is not None:
+            images, labels = self.mixup_cutmix_fn(images, labels)
+        
         # Forward pass
         logits = self(images) # Automatically calls self.forward(images)
-        loss = F.cross_entropy(logits, labels, label_smoothing=0.1) # Added Label smoothing
         
-        # Update metrics (pass logits directly for top-k accuracy)
-        self.train_accuracy(logits, labels)
+        # Compute loss
+        # Note: When MixUp is enabled, labels are soft (one-hot encoded)
+        # F.cross_entropy handles both hard labels (class indices) and soft labels (probabilities)
+        if self.mixup_cutmix_fn is not None:
+            # Soft labels from MixUp - no label smoothing needed (already done by Mixup)
+            loss = F.cross_entropy(logits, labels)
+        else:
+            # Hard labels - apply label smoothing
+            loss = F.cross_entropy(logits, labels, label_smoothing=0.1)
+        
+        # Update metrics (convert soft labels back to hard labels for accuracy calculation)
+        if self.mixup_cutmix_fn is not None:
+            # For soft labels, take argmax to get predicted class
+            labels_for_metrics = labels.argmax(dim=1)
+        else:
+            labels_for_metrics = labels
+        
+        self.train_accuracy(logits, labels_for_metrics)
         
         # Log metrics - Lightning handles the logging automatically
-        # Note: Only log loss on_step for performance. Metrics synced only on_epoch to avoid DDP overhead
+        # Note: sync_dist=True ensures metrics are properly aggregated across all GPUs in DDP mode
+        # In single-GPU mode, sync_dist=True is a no-op (no performance penalty)
         self.log('train/loss', loss, on_step=True, on_epoch=True, prog_bar=True)
         self.log('train/accuracy', self.train_accuracy, on_step=False, on_epoch=True, prog_bar=True)
 
@@ -135,7 +177,8 @@ class ResnetLightningModule(L.LightningModule):
         # Update metrics (pass logits directly for top-k accuracy)
         self.val_accuracy(logits, labels)
         
-        # Log metrics - only log on_epoch to avoid DDP sync overhead
+        # Log metrics - sync_dist=True aggregates metrics across GPUs
+        # In single-GPU mode, sync_dist=True is a no-op (no performance penalty)
         self.log('val/loss', loss, on_step=False, on_epoch=True, prog_bar=True)
         self.log('val/accuracy', self.val_accuracy, on_step=False, on_epoch=True, prog_bar=True)
 
@@ -146,18 +189,6 @@ class ResnetLightningModule(L.LightningModule):
         Returns:
             optimizer or dict with optimizer and scheduler
         """
-
-        # if self.use_sam:
-        #     # Use SAM optimizer
-        #     base_optimizer = torch.optim.SGD
-        #     optimizer = SAM(
-        #         self.model.parameters(),
-        #         base_optimizer=base_optimizer,
-        #         lr=self.learning_rate,
-        #         weight_decay=self.weight_decay,
-        #         momentum=0.9
-        #     )
-        # else:
         optimizer = torch.optim.SGD(
             self.model.parameters(),
             lr=self.learning_rate,
@@ -166,26 +197,31 @@ class ResnetLightningModule(L.LightningModule):
             )
         
         if scheduler_type == 'one_cycle_policy':
+            # Calculate steps per epoch using Lightning's estimated_stepping_batches
+            # This is available during configure_optimizers and accounts for all training settings
+            total_steps = self.trainer.estimated_stepping_batches
+            
             # Create OneCycle scheduler with EXACT parameters
             # This was setup in notebook by running set up ocp function
             scheduler = torch.optim.lr_scheduler.OneCycleLR(
                 optimizer,
                 max_lr=self.learning_rate,        
-                total_steps=self.total_steps,
+                steps=total_steps,
                 pct_start=0.2,          
-                anneal_strategy='cos',  
-                cycle_momentum=True,    
-                base_momentum=0.85,     
-                max_momentum=0.95,      
-                div_factor=100.0,        # Calculated: max_lr/base_lr = 2.35e-04/2.35e-05
-                final_div_factor=1000.0  
+                anneal_strategy='cos',
+                cycle_momentum=True,
+                base_momentum=0.85,
+                max_momentum=0.95,
+                div_factor=100.0,
+                final_div_factor=1000.0
             )
             
             print(f"🔄 Recreated OneCycleLR Scheduler:")
             print(f"   Max LR: {self.learning_rate:.4e}")
             print(f"   Initial LR: {self.learning_rate/100.0:.4e}")
-            print(f"   Total steps: {self.total_steps}")
-            print(f"   Steps per epoch: {704}")
+            print(f"   Total steps: {total_steps}")
+            print(f"   Num devices: {self.trainer.num_devices}")
+            print(f"   Strategy: {self.trainer.strategy.__class__.__name__}")
             print(f"   Pct start: {0.2}")
             print(f"   Div factor: {100.0}")
             
@@ -196,6 +232,32 @@ class ResnetLightningModule(L.LightningModule):
                     "interval": "step",  # OneCycle updates every step
                     "frequency": 1,
                     "name": "OneCycleLR"
+                }
+            }
+        elif scheduler_type == 'cosine_annealing':
+            # CosineAnnealingLR scheduler - gradually decreases learning rate following a cosine curve
+            # Calculate total steps for step-based scheduling
+            # Note: estimated_stepping_batches already accounts for all epochs
+            total_steps = self.trainer.estimated_stepping_batches
+            
+            scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+                optimizer,
+                T_max=total_steps,  # Total number of training steps for one cosine cycle
+                eta_min=1e-6  # Minimum learning rate (prevents going to zero)
+            )
+            
+            print(f"📉 CosineAnnealingLR Scheduler:")
+            print(f"   Initial LR: {self.learning_rate:.4e}")
+            print(f"   Min LR (eta_min): {1e-6:.4e}")
+            print(f"   T_max (steps): {total_steps}")
+            print(f"   Num devices: {self.trainer.num_devices}")
+            print(f"   Strategy: {self.trainer.strategy.__class__.__name__}")
+            
+            return {
+                "optimizer": optimizer,
+                "lr_scheduler": {
+                    "scheduler": scheduler,
+                    "interval": "step",  # CosineAnnealing updates every step
                 }
             }
         else:
@@ -220,37 +282,9 @@ class ResnetLightningModule(L.LightningModule):
             }
         }
 
-    def optimizer_step(self, epoch, batch_idx, optimizer, optimizer_closure):
-        """
-        Override optimizer step to support SAM's two-step optimization.
-        
-        This method is called by Lightning instead of optimizer.step().
-        For SAM, we need to:
-        1. First step: compute gradients and take ascent step
-        2. Second step: recompute gradients and take descent step
-        """
-        # Lightning wraps optimizers in LightningOptimizer
-        # Access the actual optimizer
-        actual_optimizer = optimizer.optimizer if hasattr(optimizer, 'optimizer') else optimizer
-
-        # Check if we're using SAM optimizer
-        if isinstance(actual_optimizer, SAM):
-            # SAM's two-step optimization
-            # Step 1: Ascent step (move to adversarial parameters)
-            actual_optimizer.first_step(zero_grad=True)
-            
-            # Step 2: Re-compute loss and gradients at adversarial parameters
-            # Lightning will handle the closure call for us
-            optimizer_closure()
-            
-            # Step 3: Descent step (update actual parameters)
-            actual_optimizer.second_step(zero_grad=True)
-        else:
-            # Standard optimizer step for non-SAM optimizers
-            optimizer.step(closure=optimizer_closure)
-
+    @rank_zero_only
     def on_train_start(self):
-        """Called at the start of training - log model graph"""
+        """Called at the start of training - log model graph (only on rank 0 to avoid duplication in DDP)"""
         # Log model architecture to TensorBoard
         if self.logger is None:
             return
@@ -300,24 +334,49 @@ class ResnetLightningModule(L.LightningModule):
         except Exception as e:
             print(f"❌ Error logging model info: {e}")
 
+    def on_train_epoch_start(self):
+        """Called at the start of each training epoch - log current learning rate"""
+        # Get current learning rate from optimizer
+        try:
+            # Get all optimizers (usually just one)
+            optimizers = self.optimizers()
+            if not isinstance(optimizers, list):
+                optimizers = [optimizers]
+            
+            # Get LR from first optimizer, first param group
+            current_lr = optimizers[0].param_groups[0]['lr']
+            
+            # Log to console (only rank 0 to avoid spam in DDP)
+            if self.trainer.is_global_zero:
+                print(f"\n📚 Epoch {self.current_epoch + 1}/{self.trainer.max_epochs} | Learning Rate: {current_lr:.6e}")
+            
+            # Log to TensorBoard (sync_dist not needed for LR as it's the same across all ranks)
+            self.log('train/learning_rate', current_lr, on_step=False, on_epoch=True, prog_bar=False)
+            
+        except Exception as e:
+            # If we can't get LR (e.g., before optimizer is created), skip silently
+            pass
+
     def on_train_epoch_end(self):
         """Called at the end of each training epoch"""
         # Get current metrics
         train_acc = self.train_accuracy.compute()
         
-        self.logger.experiment.add_text(
-            "Training/Epoch_Results", 
-            f"🚀 Epoch {self.current_epoch}: Train Acc: {train_acc:.3f}",
-            self.current_epoch
-        )
+        if self.logger is not None:
+            self.logger.experiment.add_text(
+                "Training/Epoch_Results", 
+                f"🚀 Epoch {self.current_epoch}: Train Acc: {train_acc:.3f}",
+                self.current_epoch
+            )
 
     def on_validation_epoch_end(self):
         """Called at the end of each validation epoch"""
         # Get current metrics
         val_acc = self.val_accuracy.compute()
         
-        self.logger.experiment.add_text(
-            "Validation/Epoch_Results", 
-            f"📊 Epoch {self.current_epoch}: Val Acc: {val_acc:.3f}",
-            self.current_epoch
-        )
+        if self.logger is not None:
+            self.logger.experiment.add_text(
+                "Validation/Epoch_Results", 
+                f"📊 Epoch {self.current_epoch}: Val Acc: {val_acc:.3f}",
+                self.current_epoch
+            )

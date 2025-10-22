@@ -3,6 +3,7 @@ import lightning as L
 from torch.utils.data import DataLoader
 from src.utils.utils import get_transforms
 from src.data_modules.imagenet_dataset import ImageNetDataset
+from lightning.pytorch.utilities import rank_zero_only
 
 class ImageNetDataModule(L.LightningDataModule):
     """
@@ -24,6 +25,7 @@ class ImageNetDataModule(L.LightningDataModule):
         pin_memory: bool = True,
         initial_resolution: int = 224,  # Starting resolution
         use_train_augs: bool = True,    # Whether to use train augmentations
+        prefetch_factor: int = 2,       # Number of batches to prefetch
     ):
         """
         Initialize the DataModule
@@ -34,10 +36,11 @@ class ImageNetDataModule(L.LightningDataModule):
             mean: Normalization mean values
             std: Normalization std values
             batch_size: Batch size for training
-            num_workers: Number of workers for data loading
+            num_workers: Number of workers for data loading (per GPU in DDP mode)
             pin_memory: Whether to pin memory for faster GPU transfer
             initial_resolution: Starting image resolution (default 224)
-            use_train_augs: Whether to use training augmentations (default True)        
+            use_train_augs: Whether to use training augmentations (default True)
+            prefetch_factor: Number of batches to prefetch per worker (default 2)
         """
         super().__init__()
 
@@ -53,6 +56,7 @@ class ImageNetDataModule(L.LightningDataModule):
         self.batch_size = batch_size
         self.num_workers = num_workers
         self.pin_memory = pin_memory
+        self.prefetch_factor = prefetch_factor
 
         # Store resolution and augmentation settings
         self.resolution = initial_resolution
@@ -62,28 +66,23 @@ class ImageNetDataModule(L.LightningDataModule):
         self.train_dataset = None
         self.val_dataset = None
 
-    def update_resolution(self, resolution: int, use_train_augs: bool, batch_size: int = None):
+    def update_resolution(self, resolution: int, use_train_augs: bool):
         """
-        Update resolution, augmentation type, and optionally batch size.
+        Update resolution and augmentation type.
         Called by ResolutionScheduleCallback during training.
+        Note: This must run on all ranks to update datasets on each GPU.
         
         Args:
             resolution: New image resolution (e.g., 128, 224, 288)
             use_train_augs: True for train augmentations, False for test augmentations (FixRes)
-            batch_size: New batch size (optional, None keeps current batch size)
         """
         self.resolution = resolution
         self.use_train_augs = use_train_augs
         
-        if batch_size is not None:
-            self.batch_size = batch_size
-        
-        # Recreate datasets with new transforms
+        # Recreate datasets with new transforms (must happen on all ranks)
         self.setup(stage='fit')
-        
-        print(f"✅ DataModule updated: {resolution}x{resolution}px, "
-              f"{'Train' if use_train_augs else 'Test'} augs, BS={self.batch_size}")
 
+    @rank_zero_only
     def prepare_data(self):
         """
         Called once to prepare data (download, etc.)
@@ -128,12 +127,19 @@ class ImageNetDataModule(L.LightningDataModule):
                 transform=valid_transforms
             )
 
-        # Print dataset splits - only print what exists
+        # Print dataset splits - only print what exists (only on rank 0 to avoid spam in DDP)
         if hasattr(self, 'train_dataset') and self.train_dataset is not None:
-            aug_type = "Train" if self.use_train_augs else "Test (FixRes)"
-            print(f"📊 Dataset @ {self.resolution}x{self.resolution}px:")
-            print(f"   Train: {len(self.train_dataset)} samples ({aug_type} augmentation)")
-            print(f"   Val:   {len(self.val_dataset)} samples (Test augmentation)")
+            # Use a helper function to check if we're in a DDP context
+            # In DDP, self.trainer is available and we can check is_global_zero
+            should_print = True
+            if hasattr(self, 'trainer') and self.trainer is not None:
+                should_print = self.trainer.is_global_zero
+            
+            if should_print:
+                aug_type = "Train" if self.use_train_augs else "Test (FixRes)"
+                print(f"📊 Dataset @ {self.resolution}x{self.resolution}px:")
+                print(f"   Train: {len(self.train_dataset)} samples ({aug_type} augmentation)")
+                print(f"   Val:   {len(self.val_dataset)} samples (Test augmentation)")
 
     def train_dataloader(self):
         """Return training dataloader"""
@@ -144,7 +150,9 @@ class ImageNetDataModule(L.LightningDataModule):
             shuffle=True, # Lightning automatically replaces your shuffle=True with the correct sampler in DDP.
             num_workers=self.num_workers,
             pin_memory=self.pin_memory,
-            persistent_workers=True if self.num_workers > 0 else False
+            persistent_workers=True if self.num_workers > 0 else False,
+            prefetch_factor=self.prefetch_factor if self.num_workers > 0 else None,
+            drop_last=True  # Ensure even batch sizes for MixUp compatibility
         )
 
     def val_dataloader(self):
@@ -155,5 +163,7 @@ class ImageNetDataModule(L.LightningDataModule):
             shuffle=False,  # No need to shuffle validation data
             num_workers=self.num_workers,
             pin_memory=self.pin_memory,
-            persistent_workers=True if self.num_workers > 0 else False
+            persistent_workers=True if self.num_workers > 0 else False,
+            prefetch_factor=self.prefetch_factor if self.num_workers > 0 else None,
+            drop_last=True  # Ensure even batch sizes for MixUp compatibility
         )
