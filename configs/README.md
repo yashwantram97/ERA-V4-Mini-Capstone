@@ -87,14 +87,14 @@ python train.py --config local
 # Train on AWS g5.12xlarge
 python train.py --config g5
 
-# Train on AWS p3.16xlarge with SAM optimizer
-python train.py --config p3 --use-sam
+# Train on AWS p3.16xlarge
+python train.py --config p3
 
 # Override learning rate (uses config value if not specified)
 python train.py --config g5 --lr 0.001
 
 # Combine multiple options
-python train.py --config p3 --lr 0.005 --use-sam
+python train.py --config p3 --lr 0.005
 
 # Resume from checkpoint
 python train.py --config g5 --resume logs/experiment/checkpoints/last.ckpt
@@ -140,7 +140,6 @@ Each configuration file contains:
 3. **Training Settings**
    - `EPOCHS`: Number of training epochs
    - `BATCH_SIZE`: Base batch size
-   - `DYNAMIC_BATCH_SIZE`: Whether to use dynamic batch sizing
    - `LEARNING_RATE`: Initial learning rate
    - `WEIGHT_DECAY`: Weight decay for optimizer
 
@@ -151,7 +150,7 @@ Each configuration file contains:
    - `STRATEGY`: Multi-GPU strategy (DDP, etc.)
 
 4. **Progressive Resizing Schedule**
-   - `PROG_RESIZING_FIXRES_SCHEDULE`: Dictionary mapping epochs to (resolution, use_train_augs, batch_size)
+   - `PROG_RESIZING_FIXRES_SCHEDULE`: Dictionary mapping epochs to (resolution, use_train_augs)
 
 5. **Callback Settings**
    - `EARLY_STOPPING_PATIENCE`: Patience for early stopping
@@ -163,29 +162,81 @@ Each configuration file contains:
 To add a new hardware profile:
 
 1. Create a new file: `configs/my_profile_config.py`
-2. Import from base config: `from .base_config import *`
-3. Override necessary settings
+2. Copy the structure from an existing config file (e.g., `local_config.py`)
+3. Update all settings for your hardware
 4. Update `config_manager.py` to include the new profile
 5. Add to choices in `train.py` argument parser
 
 Example:
 ```python
 # configs/my_profile_config.py
-from .base_config import *
+from pathlib import Path
+
+# Get the project root directory
+PROJECT_ROOT = Path(__file__).parent.parent
 
 PROFILE_NAME = "my_profile"
 PROFILE_DESCRIPTION = "My Custom Hardware Setup"
 
+# Dataset paths
+TRAIN_IMG_DIR = PROJECT_ROOT / "dataset" / "imagenet-mini" / "train"
+VAL_IMG_DIR = PROJECT_ROOT / "dataset" / "imagenet-mini" / "val"
+LOGS_DIR = PROJECT_ROOT / "logs"
+
+# Dataset settings
+DATASET_SIZE = 130000
+NUM_CLASSES = 1000
+INPUT_SIZE = (1, 3, 224, 224)
+
+# Normalization constants (ImageNet standard)
+MEAN = (0.485, 0.456, 0.406)
+STD = (0.229, 0.224, 0.225)
+
+# Experiment naming
+EXPERIMENT_NAME = "imagenet_my_profile"
+
+# Training settings
 EPOCHS = 50
 BATCH_SIZE = 128
+LEARNING_RATE = 2.11e-3
+WEIGHT_DECAY = 1e-4
+SCHEDULER_TYPE = 'one_cycle_policy'
+
+# Hardware settings
 NUM_WORKERS = 8
 PRECISION = "16-mixed"
 
+# Progressive Resizing schedule
 PROG_RESIZING_FIXRES_SCHEDULE = {
-    0: (128, True, 256),
-    20: (224, True, 128),
-    40: (288, False, 64),
+    0: (128, True),
+    20: (224, True),
+    40: (288, False),
 }
+
+# OneCycle scheduler settings
+ONECYCLE_KWARGS = {
+    'lr_strategy': 'manual',
+    'pct_start': 0.2,
+    'anneal_strategy': 'cos',
+    'div_factor': 100.0,
+    'final_div_factor': 1000.0
+}
+
+# LR Finder settings
+LR_FINDER_KWARGS = {
+    'start_lr': 1e-7,
+    'end_lr': 10,
+    'num_iter': 1000,
+    'step_mode': 'exp'
+}
+
+# Callback settings
+EARLY_STOPPING_PATIENCE = 5
+SAVE_TOP_K = 3
+SAVE_LAST = True
+LOG_EVERY_N_STEPS = 50
+CHECK_VAL_EVERY_N_EPOCH = 1
+GRADIENT_CLIP_VAL = 0.5
 ```
 
 ## Configuration Best Practices
@@ -194,7 +245,7 @@ PROG_RESIZING_FIXRES_SCHEDULE = {
 - **Rule of thumb:** Use the largest batch size that fits in GPU memory
 - Start with suggested values and monitor GPU memory usage
 - Larger batch sizes = faster training but may affect convergence
-- Use dynamic batch sizing with progressive resizing for efficiency
+- Monitor GPU memory usage to optimize batch size
 
 ### Number of Workers
 - **Rule of thumb:** 2-4 workers per GPU
@@ -206,7 +257,7 @@ PROG_RESIZING_FIXRES_SCHEDULE = {
 - Start with small resolution (128px) for fast initial training
 - Gradually increase to target resolution (224px)
 - End with FixRes (288px with test-time augmentations)
-- Adjust batch sizes per stage to maintain GPU utilization
+- Fixed batch size is used throughout all stages
 
 ### Multi-GPU Training
 - Use DDP (Distributed Data Parallel) strategy
@@ -240,12 +291,13 @@ PROG_RESIZING_FIXRES_SCHEDULE = {
 configs/
 ├── __init__.py              # Package initialization
 ├── README.md                # This file
-├── base_config.py           # Shared configuration
 ├── config_manager.py        # Configuration management
-├── local_config.py          # MacBook M4 Pro config
-├── g5d_config.py           # AWS g5.12xlarge config
-└── p3_config.py            # AWS p3.16xlarge config
+├── local_config.py          # MacBook M4 Pro config (self-contained)
+├── g5_config.py             # AWS g5.12xlarge config (self-contained)
+└── p3_config.py             # AWS p3.16xlarge config (self-contained)
 ```
+
+**Note:** Each config file is now self-contained with all settings included. This makes it easier to see and modify all configurations for a specific hardware profile without needing to reference a base config file.
 
 ## Support
 

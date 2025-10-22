@@ -34,7 +34,6 @@ class ConfigProfile:
     experiment_name: str
     epochs: int
     batch_size: int
-    dynamic_batch_size: bool
     learning_rate: float
     weight_decay: float
     
@@ -50,6 +49,7 @@ class ConfigProfile:
     strategy: Optional[str] = None
     onecycle_kwargs: Optional[Dict[str, Any]] = None
     lr_finder_kwargs: Optional[Dict[str, Any]] = None
+    mixup_kwargs: Optional[Dict[str, Any]] = None
     prog_resizing_fixres_schedule: Optional[Dict[int, tuple]] = None
     early_stopping_patience: int = 5
     save_top_k: int = 3
@@ -75,7 +75,6 @@ class ConfigProfile:
             'experiment_name': self.experiment_name,
             'epochs': self.epochs,
             'batch_size': self.batch_size,
-            'dynamic_batch_size': self.dynamic_batch_size,
             'learning_rate': self.learning_rate,
             'weight_decay': self.weight_decay,
             'num_workers': self.num_workers,
@@ -85,6 +84,7 @@ class ConfigProfile:
             'scheduler_type': self.scheduler_type,
             'onecycle_kwargs': self.onecycle_kwargs,
             'lr_finder_kwargs': self.lr_finder_kwargs,
+            'mixup_kwargs': self.mixup_kwargs,
             'prog_resizing_fixres_schedule': self.prog_resizing_fixres_schedule,
             'early_stopping_patience': self.early_stopping_patience,
             'save_top_k': self.save_top_k,
@@ -106,7 +106,6 @@ class ConfigProfile:
 ║   • Batch Size: {self.batch_size}
 ║   • Learning Rate: {self.learning_rate}
 ║   • Weight Decay: {self.weight_decay}
-║   • Dynamic Batch Size: {self.dynamic_batch_size}
 ║
 ║ Hardware Settings:
 ║   • Workers: {self.num_workers}
@@ -134,7 +133,7 @@ def _load_config_module(profile_name: str):
     """Load configuration module by profile name."""
     config_map = {
         'local': 'configs.local_config',
-        'g5': 'configs.g5d_config',
+        'g5': 'configs.g5_config',
         'p3': 'configs.p3_config',
     }
     
@@ -182,7 +181,6 @@ def get_config(profile_name: str = 'local') -> ConfigProfile:
         experiment_name=getattr(module, 'EXPERIMENT_NAME'),
         epochs=getattr(module, 'EPOCHS'),
         batch_size=getattr(module, 'BATCH_SIZE'),
-        dynamic_batch_size=getattr(module, 'DYNAMIC_BATCH_SIZE'),
         learning_rate=getattr(module, 'LEARNING_RATE'),
         weight_decay=getattr(module, 'WEIGHT_DECAY'),
         num_workers=getattr(module, 'NUM_WORKERS'),
@@ -192,6 +190,7 @@ def get_config(profile_name: str = 'local') -> ConfigProfile:
         scheduler_type=getattr(module, 'SCHEDULER_TYPE'),
         onecycle_kwargs=getattr(module, 'ONECYCLE_KWARGS'),
         lr_finder_kwargs=getattr(module, 'LR_FINDER_KWARGS'),
+        mixup_kwargs=getattr(module, 'MIXUP_KWARGS', None),
         prog_resizing_fixres_schedule=getattr(module, 'PROG_RESIZING_FIXRES_SCHEDULE'),
         early_stopping_patience=getattr(module, 'EARLY_STOPPING_PATIENCE', 5),
         save_top_k=getattr(module, 'SAVE_TOP_K', 3),
