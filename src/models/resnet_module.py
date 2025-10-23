@@ -15,7 +15,6 @@ Benefits:
 - Built-in best practices
 """
 
-from src.utils.utils import serialize_transforms
 import lightning as L
 import torch
 import torch.nn.functional as F
@@ -37,14 +36,14 @@ class ResnetLightningModule(L.LightningModule):
     - Validation step  
     - Optimizer configuration
     - Metrics tracking
+    
+    Note: Works with FFCV dataloaders for fast data loading
     """
     def __init__(
         self,
         learning_rate: float = 0.001,
         weight_decay: float = 1e-4,
         num_classes: int = 100,
-        train_transforms = None,
-        # total_steps: int = None,
         mixup_kwargs: dict = None
         ):
         super().__init__()
@@ -52,9 +51,6 @@ class ResnetLightningModule(L.LightningModule):
         self.learning_rate = learning_rate
         self.weight_decay = weight_decay
         self.num_classes = num_classes
-        # self.total_steps = total_steps
-        # Store transforms for hyperparameter logging
-        self.train_transforms = train_transforms
         
         # Initialize MixUp/CutMix if enabled
         self.mixup_cutmix_fn = None
@@ -82,17 +78,6 @@ class ResnetLightningModule(L.LightningModule):
                 print(f"✅ CutMix enabled with alpha={cutmix_alpha}")
         else:
             print("ℹ️  MixUp/CutMix disabled (set mixup_alpha > 0 or cutmix_alpha > 0 to enable)")
-
-        # We'll create a custom dict to include serialized transforms
-        hparams_dict = {
-            "learning_rate": learning_rate,
-            "weight_decay": weight_decay,
-            "num_classes": num_classes,
-        }
-
-        # Add serialized transforms if available
-        if train_transforms is not None:
-            hparams_dict["train_transforms"] = serialize_transforms(train_transforms)
         
         # Save hyperparameters - Lightning logs these automatically
         self.save_hyperparameters()
@@ -108,9 +93,17 @@ class ResnetLightningModule(L.LightningModule):
         # Why separate metrics? Each stage (train/val/test) needs independent tracking
         self.train_accuracy = torchmetrics.Accuracy(task="multiclass", num_classes=num_classes, top_k=1)
         
-        self.val_accuracy = torchmetrics.Accuracy(task="multiclass", num_classes=num_classes, top_k=1)            
+        self.val_accuracy = torchmetrics.Accuracy(task="multiclass", num_classes=num_classes, top_k=1)
+        
     def forward(self, x):
-        """Forward pass - just call the model"""
+        """
+        Forward pass - just call the model
+        
+        Note: FFCV outputs data in channels_last format by default (via ToTorchImage),
+        which matches our model's memory format for optimal performance.
+        """
+        # Ensure input is in channels_last format for consistency
+        x = x.to(memory_format=torch.channels_last)
         return self.model(x)
 
     def training_step(self, batch, batch_idx):

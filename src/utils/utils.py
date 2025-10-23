@@ -1,6 +1,12 @@
 from pathlib import Path
 import torchvision.transforms as T
 from config import PROJECT_ROOT
+from typing import List
+from ffcv.pipeline.operation import Operation
+from ffcv.fields.basics import IntDecoder
+from ffcv.transforms import ToTensor, Squeeze
+from ffcv.fields.decoders import SimpleRGBImageDecoder
+
 
 def get_transforms(transform_type="train", mean=None, std=None, resolution=224):
     """
@@ -17,7 +23,7 @@ def get_transforms(transform_type="train", mean=None, std=None, resolution=224):
     """
     if transform_type == "train":
         # Training transforms with TrivialAugmentWide for strong augmentation
-        transforms = T.Compose([
+        transforms = [
             T.RandomResizedCrop(resolution, scale=(0.08, 1.0)),
             T.RandomHorizontalFlip(),
             T.TrivialAugmentWide(),  # Powerful auto-augmentation policy
@@ -25,17 +31,24 @@ def get_transforms(transform_type="train", mean=None, std=None, resolution=224):
             T.Normalize(mean=mean, std=std),
             # RandomErasing (PyTorch's Cutout/CoarseDropout equivalent)
             T.RandomErasing(p=0.5, scale=(0.02, 0.33), ratio=(0.3, 3.3), value='random'),
-        ])
+        ]
     else:
         # Validation/Test transforms - FixRes compatible
-        transforms = T.Compose([
+        transforms = [
             T.Resize(int(resolution * 256 / 224)),  # Scale proportionally (256 for 224px)
             T.CenterCrop(resolution),
             T.ToTensor(),
             T.Normalize(mean=mean, std=std),
-        ])
+        ]
 
-    return transforms
+    image_pipeline: List[Operation] = [SimpleRGBImageDecoder()] + transforms
+    label_pipeline: List[Operation] = [
+            IntDecoder(),
+            ToTensor(),
+            Squeeze()
+        ]
+
+    return image_pipeline, label_pipeline
 
 def serialize_transforms(transform_compose):
     """
