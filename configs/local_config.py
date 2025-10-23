@@ -50,7 +50,7 @@ BATCH_SIZE = 64  # Optimized for M4 Pro MPS with mixed precision
 LEARNING_RATE = 0.25  # Found with LR finder
 WEIGHT_DECAY = 1e-4
 SCHEDULER_TYPE = 'cosine_annealing'
-
+ACCUMULATE_GRAD_BATCHES = 1
 # DataLoader settings - fewer workers for M4 Pro
 NUM_WORKERS = 4  # M4 Pro has good CPU but shared with training
 
