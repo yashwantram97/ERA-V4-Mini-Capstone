@@ -71,7 +71,7 @@ EARLY_STOPPING_PATIENCE = 10
 
 # Checkpointing
 SAVE_TOP_K = 1  # Save top 3 models
-SAVE_LAST = False
+SAVE_LAST = True
 
 # Logging
 LOG_EVERY_N_STEPS = 50
