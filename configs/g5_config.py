@@ -45,6 +45,7 @@ EXPERIMENT_NAME = "imagenet_g5d_training"
 # Training settings
 EPOCHS = 60
 BATCH_SIZE = 128  # Good starting point for A10G with 24GB
+ACCUMULATE_GRAD_BATCHES = 4
 LEARNING_RATE = 0.25  # Found with LR finder
 WEIGHT_DECAY =  5e-4
 SCHEDULER_TYPE = 'cosine_annealing'

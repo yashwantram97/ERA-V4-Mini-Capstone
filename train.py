@@ -163,6 +163,7 @@ def train_with_lightning(
         "gradient_clip_val": config.gradient_clip_val,
         "enable_progress_bar": True,
         "reload_dataloaders_every_n_epochs": 1,
+        "accumulate_grad_batches": config.accumulate_grad_batches,
     }
     
     # Add strategy for multi-GPU training
