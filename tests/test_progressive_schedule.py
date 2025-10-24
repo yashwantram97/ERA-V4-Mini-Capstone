@@ -78,7 +78,7 @@ def print_schedule(schedule, title):
     sorted_epochs = sorted(schedule.keys())
     for i, epoch in enumerate(sorted_epochs):
         size, use_train_augs = schedule[epoch]
-        aug_type = "Train (RandomResizedCrop + Flip)" if use_train_augs else "Test (Resize + CenterCrop) - FixRes"
+        aug_type = "Train (RandomResizedCrop + Flip + TrivialAugmentWide + RandomErasing)" if use_train_augs else "Test (Resize + CenterCrop) - FixRes"
         
         # Calculate range
         if i < len(sorted_epochs) - 1:
@@ -98,13 +98,14 @@ def main():
     # Test 1: MosaicML Composer recommended settings (60 epochs)
     print("\n🎯 MosaicML Composer Recommended Settings")
     composer_schedule = create_progressive_resize_schedule(
-        total_epochs=60,
-        target_size=224,
-        initial_scale=0.5,
-        delay_fraction=0.5,
-        finetune_fraction=0.2,
-        size_increment=4,
-        use_fixres=False
+    total_epochs=60,
+    target_size=224,          # Standard ImageNet resolution
+    initial_scale=0.64,       # Start at 64% (144px) - IMPROVED from 0.5
+    delay_fraction=0.3,       # First 30% at initial scale - IMPROVED from 0.5
+    finetune_fraction=0.3,    # Last 30% at full size - IMPROVED from 0.2
+    size_increment=4,         # Round to multiples of 4
+    use_fixres=False,         # Disable FixRes for local dev (faster)
+    fixres_size=256   
     )
     print_schedule(composer_schedule, "60 Epochs - MosaicML Composer Approach")
     
@@ -131,13 +132,13 @@ def main():
     print("\n\n🎯 With FixRes Enabled (+1-2% Accuracy Boost)")
     fixres_schedule = create_progressive_resize_schedule(
         total_epochs=60,
-        target_size=224,
-        initial_scale=0.5,
-        delay_fraction=0.5,
-        finetune_fraction=0.2,
-        size_increment=4,
-        use_fixres=True,
-        fixres_size=256
+        target_size=224,          # Standard ImageNet resolution
+        initial_scale=0.64,       # Start at 64% (144px) - IMPROVED from 0.5
+        delay_fraction=0.3,       # First 30% at initial scale - IMPROVED from 0.5
+        finetune_fraction=0.3,    # Last 30% at full size - IMPROVED from 0.2
+        size_increment=4,         # Round to multiples of 4
+        use_fixres=True,          # Enable FixRes for demonstration
+        fixres_size=256           # Higher resolution for FixRes phase
     )
     print_schedule(fixres_schedule, "60 Epochs - With FixRes Phase")
     
@@ -145,12 +146,13 @@ def main():
     print("\n\n🎯 Alternative: 100 Epochs Training")
     long_schedule = create_progressive_resize_schedule(
         total_epochs=100,
-        target_size=224,
-        initial_scale=0.5,
-        delay_fraction=0.5,
-        finetune_fraction=0.2,
-        size_increment=4,
-        use_fixres=False
+        target_size=224,          # Standard ImageNet resolution
+        initial_scale=0.64,       # Start at 64% (144px) - IMPROVED from 0.5
+        delay_fraction=0.3,       # First 30% at initial scale - IMPROVED from 0.5
+        finetune_fraction=0.3,    # Last 30% at full size - IMPROVED from 0.2
+        size_increment=4,         # Round to multiples of 4
+        use_fixres=False,         # Disable FixRes for local dev (faster)
+        fixres_size=256   
     )
     print_schedule(long_schedule, "100 Epochs - Extended Training")
     
@@ -158,12 +160,13 @@ def main():
     print("\n\n🎯 Aggressive: Faster Ramp-Up")
     aggressive_schedule = create_progressive_resize_schedule(
         total_epochs=60,
-        target_size=224,
-        initial_scale=0.5,
-        delay_fraction=0.3,      # Shorter delay
-        finetune_fraction=0.3,    # Longer fine-tune
-        size_increment=4,
-        use_fixres=False
+        target_size=224,          # Standard ImageNet resolution
+        initial_scale=0.64,       # Start at 64% (144px) - IMPROVED from 0.5
+        delay_fraction=0.3,       # First 30% at initial scale - IMPROVED from 0.5
+        finetune_fraction=0.3,    # Last 30% at full size - IMPROVED from 0.2
+        size_increment=4,         # Round to multiples of 4
+        use_fixres=False,         # Disable FixRes for local dev (faster)
+        fixres_size=256   
     )
     print_schedule(aggressive_schedule, "60 Epochs - Faster Ramp-Up (30% delay, 30% finetune)")
     

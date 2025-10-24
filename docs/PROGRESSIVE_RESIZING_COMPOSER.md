@@ -125,11 +125,11 @@ Example output:
 ================================================================================
 Epoch      Resolution      Augmentation                  
 --------------------------------------------------------------------------------
-0-29       112x112 px         Train (RandomResizedCrop + Flip)
-30-30      112x112 px         Train (RandomResizedCrop + Flip)
-31-31      120x120 px         Train (RandomResizedCrop + Flip)
+0-29       112x112 px         Train (RandomResizedCrop + Flip + TrivialAugmentWide + RandomErasing)
+30-30      112x112 px         Train (RandomResizedCrop + Flip + TrivialAugmentWide + RandomErasing)
+31-31      120x120 px         Train (RandomResizedCrop + Flip + TrivialAugmentWide + RandomErasing)
 ...
-48+        224x224 px         Train (RandomResizedCrop + Flip)
+48+        224x224 px         Train (RandomResizedCrop + Flip + TrivialAugmentWide + RandomErasing)
 ================================================================================
 ```
 
