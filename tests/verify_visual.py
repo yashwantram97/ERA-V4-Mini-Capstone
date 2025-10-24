@@ -823,13 +823,38 @@ def visualize_cosine_annealing():
         momentum=0.9
     )
     
-    # Create Cosine Annealing scheduler
+    # Create Cosine Annealing scheduler WITH LINEAR WARMUP (matching actual implementation)
     eta_min = 1e-6
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+    
+    # Define warmup phase (5% of total training steps)
+    warmup_steps = int(0.05 * total_steps)
+    cosine_steps = total_steps - warmup_steps
+    
+    # Create Linear Warmup scheduler
+    warmup_scheduler = torch.optim.lr_scheduler.LinearLR(
         optimizer,
-        T_max=total_steps,
+        start_factor=0.01,  # Start at 1% of initial LR
+        end_factor=1.0,     # End at 100% of initial LR
+        total_iters=warmup_steps
+    )
+    
+    # Create Cosine Annealing scheduler for the main training phase
+    cosine_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+        optimizer,
+        T_max=cosine_steps,
         eta_min=eta_min
     )
+    
+    # Combine warmup and cosine annealing using SequentialLR
+    scheduler = torch.optim.lr_scheduler.SequentialLR(
+        optimizer,
+        schedulers=[warmup_scheduler, cosine_scheduler],
+        milestones=[warmup_steps]
+    )
+    
+    print(f"   Warmup steps: {warmup_steps} ({warmup_steps/total_steps*100:.1f}%)")
+    print(f"   Initial LR (warmup start): {LEARNING_RATE * 0.01:.4e}")
+    print(f"   Target LR (after warmup): {LEARNING_RATE:.4e}")
     
     # Collect LR values
     lr_history = []
@@ -846,11 +871,17 @@ def visualize_cosine_annealing():
     
     # Plot 1: Learning Rate Schedule (epochs)
     epochs_x = np.array(step_numbers) / steps_per_epoch
+    warmup_epoch = warmup_steps / steps_per_epoch
+    
     axes[0, 0].plot(epochs_x, lr_history, linewidth=2, color='#06D6A0')
     axes[0, 0].set_xlabel('Epoch', fontsize=12, fontweight='bold')
     axes[0, 0].set_ylabel('Learning Rate', fontsize=12, fontweight='bold')
     axes[0, 0].set_title('Cosine Annealing Schedule (Full Training)', fontsize=14, fontweight='bold')
     axes[0, 0].grid(True, alpha=0.3)
+    
+    # Add vertical line to mark end of warmup
+    axes[0, 0].axvline(warmup_epoch, color='red', linestyle='--', alpha=0.5, linewidth=2, label=f'Warmup End (Epoch {warmup_epoch:.1f})')
+    axes[0, 0].legend(loc='upper right', fontsize=10)
     
     # Add annotations
     axes[0, 0].annotate(f'Start LR: {lr_history[0]:.2e}', 
@@ -875,6 +906,11 @@ def visualize_cosine_annealing():
     axes[0, 1].set_title('Cosine Annealing - First 25% of Training', fontsize=14, fontweight='bold')
     axes[0, 1].grid(True, alpha=0.3)
     
+    # Add vertical line to mark end of warmup in zoomed view
+    if warmup_steps < zoom_steps:
+        axes[0, 1].axvline(warmup_steps, color='red', linestyle='--', alpha=0.5, linewidth=2, label=f'Warmup End (Step {warmup_steps})')
+        axes[0, 1].legend(loc='lower right', fontsize=10)
+    
     # Plot 3: LR Decay Rate (derivative)
     lr_changes = np.diff(lr_history)
     axes[1, 0].plot(epochs_x[:-1], lr_changes, linewidth=1, color='#FF006E', alpha=0.7)
@@ -892,13 +928,14 @@ def visualize_cosine_annealing():
     • Final LR: {lr_history[-1]:.6e}
     • Min LR (eta_min): {eta_min:.6e}
     • T_max: {total_steps} steps
-    • Reduction Ratio: {lr_history[0] / lr_history[-1]:.1f}x
+    • Reduction Ratio: {lr_history[-1] / lr_history[0] if lr_history[0] > 0 else 0:.6e}
     
     Key Characteristics:
+    ✓ Linear warmup (5% of steps)
     ✓ Smooth, monotonic decrease
     ✓ Follows cosine curve
-    ✓ No warmup phase
-    ✓ Starts at max LR immediately
+    ✓ Starts at 1% of max LR
+    ✓ Warms up to max LR
     ✓ Ends at eta_min
     
     LR at Progress Points:
@@ -907,7 +944,7 @@ def visualize_cosine_annealing():
     • 75%: {lr_history[3*len(lr_history)//4]:.6e}
     
     Comparison to OneCycle:
-    • Cosine: Monotonic decrease
+    • Cosine: Warmup + steady decay
     • OneCycle: Warmup then anneal
     • Cosine: Simpler, more stable
     • OneCycle: More aggressive

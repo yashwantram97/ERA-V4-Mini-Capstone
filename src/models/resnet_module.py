@@ -234,22 +234,46 @@ class ResnetLightningModule(L.LightningModule):
                     "name": "OneCycleLR"
                 }
             }
-        elif scheduler_type == 'cosine_annealing':
-            # CosineAnnealingLR scheduler - gradually decreases learning rate following a cosine curve
+        elif scheduler_type == 'cosine_annealing_with_linear_warmup':
+            # CosineAnnealingLR scheduler with linear warmup
             # Calculate total steps for step-based scheduling
             # Note: estimated_stepping_batches already accounts for all epochs
             total_steps = self.trainer.estimated_stepping_batches
             
-            scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+            # Define warmup phase (5% of total training steps)
+            warmup_steps = int(0.05 * total_steps)
+            cosine_steps = total_steps - warmup_steps
+            
+            # Create Linear Warmup scheduler
+            # Starts from a very small LR and linearly increases to target LR
+            warmup_scheduler = torch.optim.lr_scheduler.LinearLR(
                 optimizer,
-                T_max=total_steps,  # Total number of training steps for one cosine cycle
+                start_factor=0.01,  # Start at 1% of initial LR (0.01 * learning_rate)
+                end_factor=1.0,     # End at 100% of initial LR (learning_rate)
+                total_iters=warmup_steps
+            )
+            
+            # Create Cosine Annealing scheduler for the main training phase
+            cosine_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+                optimizer,
+                T_max=cosine_steps,  # Cosine annealing for remaining steps
                 eta_min=1e-6  # Minimum learning rate (prevents going to zero)
             )
             
-            print(f"📉 CosineAnnealingLR Scheduler:")
-            print(f"   Initial LR: {self.learning_rate:.4e}")
+            # Combine warmup and cosine annealing using SequentialLR
+            scheduler = torch.optim.lr_scheduler.SequentialLR(
+                optimizer,
+                schedulers=[warmup_scheduler, cosine_scheduler],
+                milestones=[warmup_steps]  # Switch from warmup to cosine at this step
+            )
+            
+            print(f"📉 CosineAnnealingLR Scheduler with Linear Warmup:")
+            print(f"   Initial LR (warmup start): {self.learning_rate * 0.01:.4e}")
+            print(f"   Target LR (after warmup): {self.learning_rate:.4e}")
             print(f"   Min LR (eta_min): {1e-6:.4e}")
-            print(f"   T_max (steps): {total_steps}")
+            print(f"   Warmup steps: {warmup_steps} ({warmup_steps/total_steps*100:.1f}%)")
+            print(f"   Cosine annealing steps: {cosine_steps}")
+            print(f"   Total steps: {total_steps}")
             print(f"   Num devices: {self.trainer.num_devices}")
             print(f"   Strategy: {self.trainer.strategy.__class__.__name__}")
             
@@ -257,7 +281,7 @@ class ResnetLightningModule(L.LightningModule):
                 "optimizer": optimizer,
                 "lr_scheduler": {
                     "scheduler": scheduler,
-                    "interval": "step",  # CosineAnnealing updates every step
+                    "interval": "step",  # SequentialLR updates every step
                 }
             }
         else:
