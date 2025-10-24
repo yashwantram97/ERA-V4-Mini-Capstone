@@ -11,12 +11,13 @@ Hardware Specs:
 Optimizations:
 - High batch sizes across 8 GPUs
 - Maximum workers for data loading
-- Aggressive resolution schedule
+- Progressive resizing following MosaicML Composer's proven approach
 - Full mixed precision training
 - Optimal for large-scale training
 """
 
 from pathlib import Path
+from src.callbacks import create_progressive_resize_schedule
 
 # Get the project root directory
 PROJECT_ROOT = Path(__file__).parent.parent
@@ -59,13 +60,23 @@ S3_DIR="s3://imagenet-resnet-50-erav4/data/"
 # Precision settings
 PRECISION = "16-mixed"  # V100 has excellent Tensor Core support
 
-# Progressive Resizing + FixRes Schedule
-# Optimized for 60 epochs on 8x V100 GPUs
-PROG_RESIZING_FIXRES_SCHEDULE = {
-    0: (128, True),    # Epochs 0-9: 128px, train augs (17% - fast initial learning)
-    10: (224, True),   # Epochs 10-49: 224px, train augs (67% - main training phase)
-    50: (288, False),  # Epochs 50-59: 288px, test augs (17% - FixRes fine-tuning)
-}
+# Progressive Resizing Schedule (MosaicML Composer Approach)
+# Following proven hyperparameters from MosaicML for ResNet-50 on ImageNet:
+# - initial_scale = 0.5: Start at 50% resolution (112px for target 224px)
+# - delay_fraction = 0.5: Stay at initial scale for first 50% of training (30 epochs)
+# - finetune_fraction = 0.2: Train at full resolution for last 20% (12 epochs)
+# - size_increment = 4: Round sizes to multiples of 4 for alignment
+# - use_fixres = True: Optional FixRes phase at higher resolution
+PROG_RESIZING_FIXRES_SCHEDULE = create_progressive_resize_schedule(
+    total_epochs=EPOCHS,
+    target_size=224,          # Standard ImageNet resolution
+    initial_scale=0.5,        # Start at 50% (112px)
+    delay_fraction=0.5,       # First 50% at initial scale
+    finetune_fraction=0.2,    # Last 20% at full size
+    size_increment=4,         # Round to multiples of 4
+    use_fixres=False,         # Enable FixRes for +1-2% accuracy boost
+    fixres_size=256           # Higher resolution for FixRes phase
+)
 
 # Early stopping - more patience for full training
 EARLY_STOPPING_PATIENCE = 10

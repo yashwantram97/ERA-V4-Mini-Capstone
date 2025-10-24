@@ -17,8 +17,8 @@ This directory contains comprehensive tests for all training components includin
 - ✅ TEST 4: BlurPool
 - ✅ TEST 5: FixRes
 - ✅ TEST 6: MixUp
-- ✅ TEST 7: CutMix (NEW!)
-- ✅ TEST 8: Cosine Annealing Scheduler (NEW!)
+- ✅ TEST 7: CutMix
+- ✅ TEST 8: Cosine Annealing Scheduler
 
 **Run**: `python tests/verify_training_components.py`
 
@@ -31,12 +31,54 @@ This directory contains comprehensive tests for all training components includin
 - 📐 Resolution schedule timeline
 - 🔍 BlurPool integration
 - 🎨 MixUp visualization
-- 🎨 CutMix visualization (NEW!)
-- 📉 Cosine Annealing LR schedule (NEW!)
+- 🎨 CutMix visualization
+- 📉 Cosine Annealing LR schedule
 
 **Run**: `python tests/verify_visual.py`
 
-#### 3. `test_mixup_only.py`
+#### 3. `test_advanced_features.py` ⭐ **NEW!**
+**Purpose**: Advanced training features verification
+
+**Tests Included**:
+- ✅ TEST 1: Progressive Resizing (MosaicML Composer approach)
+  - Schedule generation with percentage-based parameters
+  - Smooth curriculum learning progression
+  - Phase boundary verification
+  - Size increment alignment
+  - Adaptability to different epoch counts
+- ✅ TEST 2: FixRes (Test-Time Augmentation Alignment)
+  - FixRes phase configuration
+  - Test vs train augmentation switching
+  - Higher resolution in FixRes phase
+  - Timing verification (last 10% of training)
+- ✅ TEST 3: 16-Mixed Precision
+  - Automatic mixed precision (AMP) functionality
+  - GradScaler for loss scaling
+  - Forward/backward pass with FP16
+  - Memory efficiency verification
+  - Numerical stability checks
+- ✅ TEST 4: Channels Last Memory Format
+  - NHWC layout conversion
+  - Stride pattern verification
+  - Model compatibility (Conv, BatchNorm, etc.)
+  - Format preservation through layers
+  - ResNet compatibility
+
+**Run**: `python tests/test_advanced_features.py`
+
+#### 4. `test_progressive_schedule.py`
+**Purpose**: Visualize progressive resizing schedules
+
+**Features**:
+- Multiple schedule examples (60, 100 epochs)
+- MosaicML Composer recommended settings
+- FixRes enabled/disabled comparison
+- Aggressive vs conservative schedules
+- Detailed phase breakdowns
+
+**Run**: `python tests/test_progressive_schedule.py`
+
+#### 5. `test_mixup_only.py`
 **Purpose**: Quick standalone MixUp test
 
 **Features**:
@@ -56,12 +98,68 @@ This directory contains comprehensive tests for all training components includin
 | BlurPool | ✅ | ✅ | Complete |
 | FixRes | ✅ | ✅ | Complete |
 | MixUp | ✅ | ✅ | Complete |
-| **CutMix** | ✅ | ✅ | **NEW!** |
-| **Cosine Annealing** | ✅ | ✅ | **NEW!** |
+| CutMix | ✅ | ✅ | Complete |
+| Cosine Annealing | ✅ | ✅ | Complete |
+| **Progressive Resizing (Composer)** | ✅ | ✅ | **NEW!** |
+| **16-Mixed Precision** | ✅ | ❌ | **NEW!** |
+| **Channels Last Format** | ✅ | ❌ | **NEW!** |
 
 ## 🎯 Latest Additions
 
-### Test 6: MixUp
+### Test Suite: Advanced Features (test_advanced_features.py) ⭐ **NEW!**
+
+#### Test 1: Progressive Resizing (MosaicML Composer)
+**Functional Tests (6 Sub-Tests)**:
+1. ✅ Schedule generation with percentage-based parameters
+2. ✅ Initial resolution verification (112px for 50% scale)
+3. ✅ Phase boundaries (delay, progressive, fine-tune)
+4. ✅ Curriculum smoothness (monotonic increase, aligned increments)
+5. ✅ Adaptability to different epoch counts (30, 60, 100)
+6. ✅ Size increment alignment (4, 8, 16 pixel multiples)
+
+**Visual Tests (1 Output)**:
+1. 📐 Schedule visualization (test_progressive_schedule.py)
+
+#### Test 2: FixRes
+**Functional Tests (5 Sub-Tests)**:
+1. ✅ FixRes phase generation when enabled
+2. ✅ Higher resolution verification (256px vs 224px)
+3. ✅ Timing verification (last 10% of training)
+4. ✅ Augmentation switching (train → test augmentations)
+5. ✅ Impact comparison (with vs without FixRes)
+
+#### Test 3: 16-Mixed Precision
+**Functional Tests (6 Sub-Tests)**:
+1. ✅ Model setup and device placement
+2. ✅ Autocast context manager (FP16/FP32 switching)
+3. ✅ GradScaler initialization
+4. ✅ Full training step (forward + backward + optimizer)
+5. ✅ Memory efficiency (50% activation savings)
+6. ✅ Numerical stability (consistent outputs)
+
+**Capabilities**:
+- Works on both CUDA and CPU
+- Tests mixed precision infrastructure
+- Verifies gradient scaling
+
+#### Test 4: Channels Last Memory Format
+**Functional Tests (7 Sub-Tests)**:
+1. ✅ Memory format conversion (NCHW → NHWC)
+2. ✅ Stride pattern verification
+3. ✅ Model compatibility (Conv, BatchNorm, etc.)
+4. ✅ Format preservation through layers
+5. ✅ Performance characteristics
+6. ✅ ResNet50 compatibility
+7. ✅ Benefits documentation
+
+**Features**:
+- Tests NHWC layout
+- Verifies ~5-10% GPU speedup potential
+- Validates Tensor Core compatibility
+
+### Previous Test Additions
+
+#### Test 6: MixUp
 **Functional Tests (7 Sub-Tests)**:
 1. ✅ Initialization with enabled config
 2. ✅ Initialization with disabled config  
@@ -76,7 +174,7 @@ This directory contains comprehensive tests for all training components includin
 2. 📊 Label distribution plots
 3. 📈 Lambda statistics
 
-### Test 7: CutMix (NEW!)
+#### Test 7: CutMix
 **Functional Tests (6 Sub-Tests)**:
 1. ✅ Initialization with enabled config
 2. ✅ Initialization with disabled config
@@ -89,7 +187,7 @@ This directory contains comprehensive tests for all training components includin
 1. 🎨 CutMix region cutting visualization
 2. 📈 Lambda distribution and statistics
 
-### Test 8: Cosine Annealing Scheduler (NEW!)
+#### Test 8: Cosine Annealing Scheduler
 **Functional Tests (5 Checks)**:
 1. ✅ Scheduler initialization
 2. ✅ Cosine decay pattern verification
