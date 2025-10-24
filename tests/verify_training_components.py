@@ -1021,18 +1021,42 @@ def test_cosine_annealing():
         momentum=0.9
     )
     
-    # Create Cosine Annealing scheduler
+    # Create Cosine Annealing scheduler WITH LINEAR WARMUP (matching actual implementation)
     eta_min = 1e-6
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+    
+    # Define warmup phase (5% of total training steps)
+    warmup_steps = int(0.05 * total_steps)
+    cosine_steps = total_steps - warmup_steps
+    
+    # Create Linear Warmup scheduler
+    warmup_scheduler = torch.optim.lr_scheduler.LinearLR(
         optimizer,
-        T_max=total_steps,
+        start_factor=0.01,  # Start at 1% of initial LR
+        end_factor=1.0,     # End at 100% of initial LR
+        total_iters=warmup_steps
+    )
+    
+    # Create Cosine Annealing scheduler for the main training phase
+    cosine_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+        optimizer,
+        T_max=cosine_steps,
         eta_min=eta_min
     )
     
-    print(f"\n🔄 Cosine Annealing Scheduler Configuration:")
-    print(f"   Initial LR: {LEARNING_RATE:.4e}")
+    # Combine warmup and cosine annealing using SequentialLR
+    scheduler = torch.optim.lr_scheduler.SequentialLR(
+        optimizer,
+        schedulers=[warmup_scheduler, cosine_scheduler],
+        milestones=[warmup_steps]
+    )
+    
+    print(f"\n🔄 Cosine Annealing Scheduler Configuration (with Linear Warmup):")
+    print(f"   Initial LR (warmup start): {LEARNING_RATE * 0.01:.4e}")
+    print(f"   Target LR (after warmup): {LEARNING_RATE:.4e}")
     print(f"   Minimum LR (eta_min): {eta_min:.4e}")
-    print(f"   T_max (total steps): {total_steps}")
+    print(f"   Warmup steps: {warmup_steps} ({warmup_steps/total_steps*100:.1f}%)")
+    print(f"   Cosine annealing steps: {cosine_steps}")
+    print(f"   Total steps: {total_steps}")
     print(f"   LR reduction ratio: {LEARNING_RATE / eta_min:.1f}x")
     
     # Simulate training and collect LR values

@@ -49,7 +49,7 @@ EPOCHS = 60
 BATCH_SIZE = 256  # Per GPU: 256, Total effective: 256 * 8 = 2048
 LEARNING_RATE = 2.11e-3  # Found with LR finder
 WEIGHT_DECAY = 1e-4
-SCHEDULER_TYPE = 'one_cycle_policy'
+SCHEDULER_TYPE = 'cosine_annealing_with_linear_warmup'
 ACCUMULATE_GRAD_BATCHES = 1
 # DataLoader settings - maximize data throughput
 NUM_WORKERS = 16  # 2 workers per GPU (8 GPUs) = 16 total
