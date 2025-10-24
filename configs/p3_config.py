@@ -36,7 +36,7 @@ LOGS_DIR = PROJECT_ROOT / "logs"
 # Dataset settings (full ImageNet)
 DATASET_SIZE = 1281167  # Full ImageNet-1K train size
 NUM_CLASSES = 1000
-INPUT_SIZE = (1, 3, 224, 224)
+INPUT_SIZE = (1, 3, 256, 256)
 
 # Normalization constants (ImageNet standard)
 MEAN = (0.485, 0.456, 0.406)
@@ -60,21 +60,31 @@ S3_DIR="s3://imagenet-resnet-50-erav4/data/"
 # Precision settings
 PRECISION = "16-mixed"  # V100 has excellent Tensor Core support
 
-# Progressive Resizing Schedule (MosaicML Composer Approach)
-# Following proven hyperparameters from MosaicML for ResNet-50 on ImageNet:
-# - initial_scale = 0.5: Start at 50% resolution (112px for target 224px)
-# - delay_fraction = 0.5: Stay at initial scale for first 50% of training (30 epochs)
-# - finetune_fraction = 0.2: Train at full resolution for last 20% (12 epochs)
+# Progressive Resizing Schedule (Improved Approach)
+# Updated from MosaicML's original 112px start to better initial resolution:
+# - initial_scale = 0.64: Start at 64% resolution (144px for target 224px) - BETTER than 112px
+# - delay_fraction = 0.3: Stay at initial scale for first 30% of training (shorter delay)
+# - finetune_fraction = 0.3: Train at full resolution for last 30% (longer fine-tune)
 # - size_increment = 4: Round sizes to multiples of 4 for alignment
-# - use_fixres = True: Optional FixRes phase at higher resolution
+#
+# Why 144px instead of 112px?
+# • 112px loses too much visual detail for ImageNet classification
+# • 144px provides better feature learning from the start
+# • Shorter delay phase allows more time at full resolution
+# • Longer fine-tune phase improves final accuracy
+#
+# Schedule breakdown for 60 epochs:
+# - Epochs 0-17 (30%): 144px - Better feature learning from start
+# - Epochs 18-41 (40%): 144→224px - Progressive curriculum learning
+# - Epochs 42-59 (30%): 224px - Extended fine-tune at full resolution
 PROG_RESIZING_FIXRES_SCHEDULE = create_progressive_resize_schedule(
     total_epochs=EPOCHS,
     target_size=224,          # Standard ImageNet resolution
-    initial_scale=0.5,        # Start at 50% (112px)
-    delay_fraction=0.5,       # First 50% at initial scale
-    finetune_fraction=0.2,    # Last 20% at full size
+    initial_scale=0.64,       # Start at 64% (144px) - IMPROVED from 0.5
+    delay_fraction=0.3,       # First 30% at initial scale - IMPROVED from 0.5
+    finetune_fraction=0.3,    # Last 30% at full size - IMPROVED from 0.2
     size_increment=4,         # Round to multiples of 4
-    use_fixres=False,         # Enable FixRes for +1-2% accuracy boost
+    use_fixres=True,         # Enable FixRes for +1-2% accuracy boost
     fixres_size=256           # Higher resolution for FixRes phase
 )
 

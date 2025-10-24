@@ -58,7 +58,8 @@ class ConfigProfile:
     check_val_every_n_epoch: int = 1
     gradient_clip_val: float = 0.5
     accumulate_grad_batches: int = 4
-    
+    s3_dir: Optional[str] = None
+
     def to_dict(self) -> Dict[str, Any]:
         """Convert config to dictionary."""
         return {
@@ -94,6 +95,7 @@ class ConfigProfile:
             'check_val_every_n_epoch': self.check_val_every_n_epoch,
             'gradient_clip_val': self.gradient_clip_val,
             'accumulate_grad_batches': self.accumulate_grad_batches,
+            's3_dir': self.s3_dir,
         }
     
     def __repr__(self) -> str:
@@ -201,6 +203,7 @@ def get_config(profile_name: str = 'local') -> ConfigProfile:
         log_every_n_steps=getattr(module, 'LOG_EVERY_N_STEPS', 50),
         check_val_every_n_epoch=getattr(module, 'CHECK_VAL_EVERY_N_EPOCH', 1),
         gradient_clip_val=getattr(module, 'GRADIENT_CLIP_VAL', 0.5),
+        s3_dir=getattr(module, 'S3_DIR', None),
     )
     
     return config

@@ -19,8 +19,9 @@ from datetime import datetime
 from pathlib import Path
 import torch
 from torchinfo import summary
-from src.utils.utils import get_relative_path
-from config import input_size
+# Lazy imports to avoid circular dependencies:
+# - get_relative_path: imported in methods that need it
+# - input_size: imported in _log_model_info
 
 class TextLoggingCallback(Callback):
     """
@@ -48,6 +49,7 @@ class TextLoggingCallback(Callback):
         # Setup structured logger
         self.logger = self._setup_logger(log_level)
 
+        from src.utils.utils import get_relative_path
         print(f"📝 text logs will be saved to: {get_relative_path(self.log_dir)}")
 
     def _setup_logger(self, log_level: str = "INFO"):
@@ -93,6 +95,8 @@ class TextLoggingCallback(Callback):
     @rank_zero_only
     def on_train_start(self, trainer, pl_module):
         """Log training start with detailed information (only on rank 0 to avoid log duplication)"""
+        from src.utils.utils import get_relative_path
+        
         self.start_time = datetime.now()
         self.experiment_start_time = time.time()
 
@@ -115,6 +119,8 @@ class TextLoggingCallback(Callback):
 
     def _log_model_info(self, pl_module):
         """Log model architecture and parameters, Also added in on_train_star in lit_module check if that can be removed"""
+        from config import input_size
+        
         self.logger.info("📋 Detailed Model Summary:")
         self.logger.info("-" * 60)
 
@@ -379,6 +385,8 @@ class TextLoggingCallback(Callback):
     @rank_zero_only
     def on_train_end(self, trainer, pl_module):
         """Log training completion and save metrics (only on rank 0 to avoid log duplication)"""
+        from src.utils.utils import get_relative_path
+        
         end_time = datetime.now()
         duration = time.time() - self.experiment_start_time if self.experiment_start_time else 0
         
@@ -409,6 +417,8 @@ class TextLoggingCallback(Callback):
     @rank_zero_only
     def _save_metrics_to_json(self, duration_seconds):
         """Save training metrics to JSON file (only on rank 0 to avoid conflicts in DDP)"""
+        from src.utils.utils import get_relative_path
+        
         # Prepare final metrics structure
         final_metrics = {}
         for entry in self.metrics_history:

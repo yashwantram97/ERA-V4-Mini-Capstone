@@ -17,7 +17,7 @@ python verify_training_components.py
 ## ✅ Verification Results
 
 ### 1. Image Augmentation ✅ WORKING
-- **Train transforms**: Random variations confirmed (RandomResizedCrop, HorizontalFlip, color jitter, CoarseDropout)
+- **Train transforms**: Random variations confirmed (RandomResizedCrop, HorizontalFlip, TrivialAugmentWide, RandomErasing)
 - **FixRes transforms**: Deterministic (Resize + CenterCrop)
 - **Location**: `verification_outputs/augmentations.png`
 

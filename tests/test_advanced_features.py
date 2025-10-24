@@ -219,7 +219,7 @@ def test_fixres():
         pre_fixres = {e: config for e, config in schedule_fixres.items() if e < fixres_start}
         all_train_augs = all(config[1] for config in pre_fixres.values())
         assert all_train_augs, "All epochs before FixRes should use train augmentations"
-        print_success(f"Pre-FixRes: Train augmentations (RandomResizedCrop + Flip)")
+        print_success(f"Pre-FixRes: Train augmentations (RandomResizedCrop + Flip + TrivialAugmentWide + RandomErasing)")
         
         # During FixRes: use_train_augs=False
         all_test_augs = all(not config[1] for config in fixres_epochs.values())

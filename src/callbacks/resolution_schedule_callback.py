@@ -123,7 +123,7 @@ class ResolutionScheduleCallback(Callback):
                 msg = f"\n{'='*60}\n"
                 msg += f"📐 Resolution Schedule - Epoch {current_epoch}\n"
                 msg += f"   Resolution: {size}x{size}px\n"
-                msg += f"   Augmentation: {'Train (RandomResizedCrop + Flip)' if use_train_augs else 'Test (Resize + CenterCrop) - FixRes'}\n"
+                msg += f"   Augmentation: {'Train (RandomResizedCrop + Flip + TrivialAugmentWide + RandomErasing)' if use_train_augs else 'Test (Resize + CenterCrop) - FixRes'}\n"
                 msg += f"{'='*60}"
                 print(msg)
 
