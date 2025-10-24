@@ -49,6 +49,7 @@ ACCUMULATE_GRAD_BATCHES = 4
 LEARNING_RATE = 0.25  # Found with LR finder
 WEIGHT_DECAY =  5e-4
 SCHEDULER_TYPE = 'cosine_annealing_with_linear_warmup'
+S3_DIR = "s3://imagenet-resnet-50-erav4/data/"
 
 # DataLoader settings - plenty of CPU cores available
 # In DDP mode, each GPU spawns its own workers

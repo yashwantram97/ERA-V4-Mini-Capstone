@@ -170,6 +170,8 @@ def train_with_lightning(
     if config.strategy:
         trainer_kwargs["strategy"] = config.strategy
 
+    if config.s3_dir:
+        trainer_kwargs["default_root_dir"] = config.s3_dir
     trainer = L.Trainer(**trainer_kwargs)
 
     # 6. Start Training!

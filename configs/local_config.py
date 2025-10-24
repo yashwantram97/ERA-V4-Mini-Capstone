@@ -53,6 +53,7 @@ SCHEDULER_TYPE = 'cosine_annealing_with_linear_warmup'
 ACCUMULATE_GRAD_BATCHES = 1
 # DataLoader settings - fewer workers for M4 Pro
 NUM_WORKERS = 4  # M4 Pro has good CPU but shared with training
+S3_DIR=None
 
 # Precision settings
 PRECISION = "16-mixed"  # Use mixed precision for speed

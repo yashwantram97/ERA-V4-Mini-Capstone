@@ -54,6 +54,7 @@ ACCUMULATE_GRAD_BATCHES = 1
 # DataLoader settings - maximize data throughput
 NUM_WORKERS = 16  # 2 workers per GPU (8 GPUs) = 16 total
 # V100 is compute-bound, not data-bound, so 2 workers per GPU is sufficient
+S3_DIR="s3://imagenet-resnet-50-erav4/data/"
 
 # Precision settings
 PRECISION = "16-mixed"  # V100 has excellent Tensor Core support
