@@ -245,33 +245,295 @@ def visualize_onecycle():
     print(f"   Warmup ends at epoch: {warmup_epoch:.1f}")
 
 # ============================================================================
-# 3. Visualize Resolution Schedule
+# 3. Visualize Resolution Schedule (Progressive Resizing)
 # ============================================================================
 def visualize_resolution_schedule():
-    """Create a timeline showing resolution changes"""
+    """Create comprehensive progressive resizing visualizations"""
     print("\n" + "="*80)
-    print("3️⃣  VISUALIZING RESOLUTION SCHEDULE")
+    print("3️⃣  VISUALIZING PROGRESSIVE RESIZING (MosaicML Composer)")
     print("="*80)
     
-    # Create figure
-    fig, ax = plt.subplots(figsize=(14, 6))
+    from src.callbacks import create_progressive_resize_schedule
     
-    # Sort schedule by epoch
-    schedule_items = sorted(PROG_RESIZING_FIXRES_SCHEDULE.items())
+    # Create multiple schedules to compare
+    schedules_to_visualize = [
+        {
+            'name': '60 Epochs - Composer Default',
+            'params': {
+                'total_epochs': 60,
+                'target_size': 224,
+                'initial_scale': 0.5,
+                'delay_fraction': 0.5,
+                'finetune_fraction': 0.2,
+                'size_increment': 4,
+                'use_fixres': False
+            }
+        },
+        {
+            'name': '60 Epochs - With FixRes',
+            'params': {
+                'total_epochs': 60,
+                'target_size': 224,
+                'initial_scale': 0.5,
+                'delay_fraction': 0.5,
+                'finetune_fraction': 0.2,
+                'size_increment': 4,
+                'use_fixres': True,
+                'fixres_size': 256
+            }
+        },
+        {
+            'name': '60 Epochs - Aggressive',
+            'params': {
+                'total_epochs': 60,
+                'target_size': 224,
+                'initial_scale': 0.5,
+                'delay_fraction': 0.3,
+                'finetune_fraction': 0.3,
+                'size_increment': 4,
+                'use_fixres': False
+            }
+        }
+    ]
     
-    # Create bars for each phase
-    colors = ['#3A86FF', '#8338EC', '#FF006E']
+    # Create comprehensive figure with multiple subplots
+    fig = plt.figure(figsize=(20, 14))
+    gs = fig.add_gridspec(3, 2, hspace=0.3, wspace=0.3)
+    
+    # Plot 1: Timeline view (top, full width)
+    ax_timeline = fig.add_subplot(gs[0, :])
+    
+    schedule = create_progressive_resize_schedule(**schedules_to_visualize[0]['params'])
+    schedule_items = sorted(schedule.items())
+    
+    colors_bar = ['#3A86FF', '#8338EC', '#FF006E', '#06D6A0']
     
     for i, (start_epoch, (resolution, use_train_augs)) in enumerate(schedule_items):
         # Calculate duration
         if i < len(schedule_items) - 1:
             end_epoch = schedule_items[i + 1][0]
         else:
-            end_epoch = EPOCHS
+            end_epoch = schedules_to_visualize[0]['params']['total_epochs']
         
         duration = end_epoch - start_epoch
         
-        # Create bar
+        # Determine phase
+        if i == 0:
+            phase = "Delay"
+        elif resolution == schedules_to_visualize[0]['params']['target_size'] and use_train_augs:
+            phase = "Fine-tune"
+        elif not use_train_augs:
+            phase = "FixRes"
+        else:
+            phase = "Progressive"
+        
+        aug_type = "Train" if use_train_augs else "FixRes"
+        
+        ax_timeline.barh(0, duration, left=start_epoch, height=0.6, 
+                   color=colors_bar[i % len(colors_bar)], alpha=0.8,
+                   edgecolor='black', linewidth=2)
+        
+        # Add text annotation
+        mid_epoch = start_epoch + duration / 2
+        if duration > 2:  # Only show text if there's space
+            ax_timeline.text(mid_epoch, 0, f"{resolution}px\n{phase}\n({duration}ep)",
+                   ha='center', va='center', fontweight='bold', fontsize=10,
+                   bbox=dict(boxstyle='round', facecolor='white', alpha=0.9))
+    
+    ax_timeline.set_xlabel('Epoch', fontsize=14, fontweight='bold')
+    ax_timeline.set_xlim(0, schedules_to_visualize[0]['params']['total_epochs'])
+    ax_timeline.set_ylim(-0.5, 0.5)
+    ax_timeline.set_yticks([])
+    ax_timeline.set_title('Progressive Resizing Timeline (MosaicML Composer Approach)', 
+                fontsize=16, fontweight='bold')
+    ax_timeline.grid(axis='x', alpha=0.3)
+    
+    # Plot 2: Resolution progression over epochs
+    ax_progression = fig.add_subplot(gs[1, 0])
+    
+    for sched_info in schedules_to_visualize:
+        sched = create_progressive_resize_schedule(**sched_info['params'])
+        epochs = []
+        resolutions = []
+        
+        for epoch in range(sched_info['params']['total_epochs']):
+            # Find current resolution
+            current_res = None
+            for e in sorted(sched.keys(), reverse=True):
+                if epoch >= e:
+                    current_res = sched[e][0]
+                    break
+            if current_res:
+                epochs.append(epoch)
+                resolutions.append(current_res)
+        
+        ax_progression.plot(epochs, resolutions, linewidth=2, label=sched_info['name'], marker='o', markersize=2)
+    
+    ax_progression.set_xlabel('Epoch', fontsize=12, fontweight='bold')
+    ax_progression.set_ylabel('Resolution (pixels)', fontsize=12, fontweight='bold')
+    ax_progression.set_title('Resolution Progression Comparison', fontsize=14, fontweight='bold')
+    ax_progression.grid(True, alpha=0.3)
+    ax_progression.legend(fontsize=9)
+    
+    # Plot 3: Computational savings
+    ax_compute = fig.add_subplot(gs[1, 1])
+    
+    schedule = create_progressive_resize_schedule(**schedules_to_visualize[0]['params'])
+    total_epochs = schedules_to_visualize[0]['params']['total_epochs']
+    target_size = schedules_to_visualize[0]['params']['target_size']
+    
+    # Calculate relative compute cost
+    epochs = []
+    compute_cost = []
+    
+    for epoch in range(total_epochs):
+        current_res = None
+        for e in sorted(schedule.keys(), reverse=True):
+            if epoch >= e:
+                current_res = schedule[e][0]
+                break
+        if current_res:
+            # Compute cost is proportional to resolution squared
+            relative_cost = (current_res / target_size) ** 2
+            epochs.append(epoch)
+            compute_cost.append(relative_cost)
+    
+    ax_compute.fill_between(epochs, compute_cost, alpha=0.3, color='#06D6A0')
+    ax_compute.plot(epochs, compute_cost, linewidth=2, color='#06D6A0', label='Relative Compute')
+    ax_compute.axhline(1.0, color='red', linestyle='--', linewidth=2, alpha=0.5, label='Baseline (224px)')
+    
+    ax_compute.set_xlabel('Epoch', fontsize=12, fontweight='bold')
+    ax_compute.set_ylabel('Relative Compute Cost', fontsize=12, fontweight='bold')
+    ax_compute.set_title('Computational Savings Over Time', fontsize=14, fontweight='bold')
+    ax_compute.grid(True, alpha=0.3)
+    ax_compute.legend(fontsize=10)
+    ax_compute.set_ylim(0, 1.3)
+    
+    # Calculate total savings
+    avg_cost = np.mean(compute_cost)
+    total_savings = (1.0 - avg_cost) * 100
+    ax_compute.text(0.05, 0.95, f'Avg Compute: {avg_cost:.2f}x\nSavings: {total_savings:.1f}%',
+                   transform=ax_compute.transAxes, fontsize=11, verticalalignment='top',
+                   bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.8))
+    
+    # Plot 4: Phase breakdown (bottom left)
+    ax_phases = fig.add_subplot(gs[2, 0])
+    
+    schedule = create_progressive_resize_schedule(**schedules_to_visualize[0]['params'])
+    
+    # Count epochs in each phase
+    delay_epochs = 0
+    progressive_epochs = 0
+    finetune_epochs = 0
+    fixres_epochs = 0
+    
+    initial_res = schedule[0][0]
+    target_res = schedules_to_visualize[0]['params']['target_size']
+    
+    for epoch in range(total_epochs):
+        current_res = None
+        use_train_augs = True
+        for e in sorted(schedule.keys(), reverse=True):
+            if epoch >= e:
+                current_res, use_train_augs = schedule[e]
+                break
+        
+        if current_res:
+            if not use_train_augs:
+                fixres_epochs += 1
+            elif current_res == initial_res:
+                delay_epochs += 1
+            elif current_res == target_res:
+                finetune_epochs += 1
+            else:
+                progressive_epochs += 1
+    
+    phases = ['Delay\n(Small)', 'Progressive\n(Growing)', 'Fine-tune\n(Full)', 'FixRes\n(Higher)']
+    counts = [delay_epochs, progressive_epochs, finetune_epochs, fixres_epochs]
+    colors_phase = ['#3A86FF', '#8338EC', '#FF006E', '#06D6A0']
+    
+    # Filter out zero counts
+    phases_filtered = [p for p, c in zip(phases, counts) if c > 0]
+    counts_filtered = [c for c in counts if c > 0]
+    colors_filtered = [colors_phase[i] for i, c in enumerate(counts) if c > 0]
+    
+    bars = ax_phases.bar(range(len(phases_filtered)), counts_filtered, color=colors_filtered, 
+                         alpha=0.8, edgecolor='black', linewidth=2)
+    
+    ax_phases.set_xticks(range(len(phases_filtered)))
+    ax_phases.set_xticklabels(phases_filtered, fontsize=11, fontweight='bold')
+    ax_phases.set_ylabel('Number of Epochs', fontsize=12, fontweight='bold')
+    ax_phases.set_title('Training Phase Breakdown', fontsize=14, fontweight='bold')
+    ax_phases.grid(axis='y', alpha=0.3)
+    
+    # Add value labels on bars
+    for bar, count in zip(bars, counts_filtered):
+        height = bar.get_height()
+        ax_phases.text(bar.get_x() + bar.get_width()/2., height,
+                   f'{count}\n({count/total_epochs*100:.0f}%)',
+                   ha='center', va='bottom', fontsize=10, fontweight='bold')
+    
+    # Plot 5: Hyperparameter explanation (bottom right)
+    ax_info = fig.add_subplot(gs[2, 1])
+    ax_info.axis('off')
+    
+    params = schedules_to_visualize[0]['params']
+    info_text = f"""
+    MosaicML Composer Hyperparameters
+    {'='*40}
+    
+    Configuration:
+    • total_epochs:      {params['total_epochs']}
+    • target_size:       {params['target_size']}px
+    • initial_scale:     {params['initial_scale']} ({int(params['target_size']*params['initial_scale'])}px)
+    • delay_fraction:    {params['delay_fraction']} ({int(total_epochs*params['delay_fraction'])} epochs)
+    • finetune_fraction: {params['finetune_fraction']} ({int(total_epochs*params['finetune_fraction'])} epochs)
+    • size_increment:    {params['size_increment']}px
+    
+    Phase Durations:
+    • Delay:       {delay_epochs} epochs ({delay_epochs/total_epochs*100:.0f}%)
+    • Progressive: {progressive_epochs} epochs ({progressive_epochs/total_epochs*100:.0f}%)
+    • Fine-tune:   {finetune_epochs} epochs ({finetune_epochs/total_epochs*100:.0f}%)
+    
+    Benefits:
+    ✓ ~{total_savings:.0f}% faster training
+    ✓ Curriculum learning (easy→hard)
+    ✓ Proven on ImageNet ResNet-50
+    ✓ Adapts to any epoch count
+    ✓ Smooth resolution progression
+    
+    Computational Impact:
+    • Early epochs: {(initial_res/target_res)**2:.2f}x cost ({(1-(initial_res/target_res)**2)*100:.0f}% savings)
+    • Average cost: {avg_cost:.2f}x baseline
+    • Total savings: {total_savings:.1f}% compute time
+    """
+    
+    ax_info.text(0.05, 0.95, info_text, transform=ax_info.transAxes,
+                fontsize=11, verticalalignment='top', family='monospace',
+                bbox=dict(boxstyle='round', facecolor='lightblue', alpha=0.5))
+    
+    plt.suptitle('Progressive Resizing - Comprehensive Analysis', 
+                fontsize=18, fontweight='bold', y=0.995)
+    
+    output_path = output_dir / "progressive_resizing_analysis.png"
+    plt.savefig(output_path, dpi=150, bbox_inches='tight')
+    print(f"\n✅ Saved progressive resizing analysis: {output_path}")
+    plt.close()
+    
+    # Also create the simple timeline (for backwards compatibility)
+    fig, ax = plt.subplots(figsize=(14, 6))
+    
+    # Use the actual schedule from config
+    schedule_items = sorted(PROG_RESIZING_FIXRES_SCHEDULE.items())
+    colors = ['#3A86FF', '#8338EC', '#FF006E', '#06D6A0']
+    
+    for i, (start_epoch, (resolution, use_train_augs)) in enumerate(schedule_items):
+        if i < len(schedule_items) - 1:
+            end_epoch = schedule_items[i + 1][0]
+        else:
+            end_epoch = EPOCHS
+        
+        duration = end_epoch - start_epoch
         aug_type = "Train Augs" if use_train_augs else "FixRes (Test Augs)"
         label = f"{resolution}px - {aug_type}"
         
@@ -280,18 +542,17 @@ def visualize_resolution_schedule():
                edgecolor='black', linewidth=2,
                label=label)
         
-        # Add text annotation
         mid_epoch = start_epoch + duration / 2
-        ax.text(mid_epoch, 0, f"{resolution}px\n{aug_type}\n({duration} epochs)",
-               ha='center', va='center', fontweight='bold', fontsize=11,
-               bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
+        if duration > 2:
+            ax.text(mid_epoch, 0, f"{resolution}px\n{aug_type}\n({duration} epochs)",
+                   ha='center', va='center', fontweight='bold', fontsize=11,
+                   bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
     
-    # Formatting
     ax.set_xlabel('Epoch', fontsize=14, fontweight='bold')
     ax.set_xlim(0, EPOCHS)
     ax.set_ylim(-0.5, 0.5)
     ax.set_yticks([])
-    ax.set_title(f'Progressive Resizing + FixRes Schedule ({EPOCHS} epochs)', 
+    ax.set_title(f'Progressive Resizing Schedule ({EPOCHS} epochs)', 
                 fontsize=16, fontweight='bold')
     ax.grid(axis='x', alpha=0.3)
     ax.legend(loc='upper right', fontsize=11, framealpha=0.9)
@@ -299,14 +560,17 @@ def visualize_resolution_schedule():
     plt.tight_layout()
     output_path = output_dir / "resolution_schedule.png"
     plt.savefig(output_path, dpi=150, bbox_inches='tight')
-    print(f"\n✅ Saved resolution schedule plot: {output_path}")
+    print(f"✅ Saved resolution schedule timeline: {output_path}")
     plt.close()
     
     # Print schedule details
-    print(f"\n📐 Resolution Schedule Details:")
-    for start_epoch, (resolution, use_train_augs) in schedule_items:
-        aug_type = "Train" if use_train_augs else "FixRes"
-        print(f"   Epoch {start_epoch:2d}+: {resolution}x{resolution}px ({aug_type})")
+    print(f"\n📐 Progressive Resizing Statistics:")
+    print(f"   Total epochs: {total_epochs}")
+    print(f"   Initial resolution: {initial_res}px ({initial_res/target_res*100:.0f}% of target)")
+    print(f"   Target resolution: {target_res}px")
+    print(f"   Unique resolutions: {len(set(r for r, _ in schedule.values()))}")
+    print(f"   Average compute cost: {avg_cost:.2f}x baseline")
+    print(f"   Estimated speedup: {total_savings:.1f}% faster")
 
 # ============================================================================
 # 4. Test BlurPool with visual comparison
@@ -1016,6 +1280,7 @@ def main():
     print(f"\n📁 Check the '{output_dir}' directory for generated plots:")
     print(f"   - augmentations.png: See train vs FixRes augmentations")
     print(f"   - onecycle_schedule.png: LR and momentum over training")
+    print(f"   - progressive_resizing_analysis.png: Comprehensive progressive resizing analysis ⭐ NEW!")
     print(f"   - resolution_schedule.png: Progressive resizing timeline")
     print(f"   - blurpool_verification.png: BlurPool integration status")
     print(f"   - mixup_visualization.png: See how MixUp mixes images")
