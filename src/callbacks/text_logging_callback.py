@@ -8,6 +8,7 @@ Features:
 - Multiple log files (training.log, metrics.json, model_info.txt)
 - Proper logging levels and formatters
 - DDP-safe with rank_zero_only decorators for file operations
+- S3 and remote filesystem support via fsspec
 """
 
 from lightning.pytorch.callbacks import Callback
@@ -19,6 +20,9 @@ from datetime import datetime
 from pathlib import Path
 import torch
 from torchinfo import summary
+import fsspec
+import tempfile
+import os
 # Lazy imports to avoid circular dependencies:
 # - get_relative_path: imported in methods that need it
 # - input_size: imported in _log_model_info
@@ -26,20 +30,46 @@ from torchinfo import summary
 class TextLoggingCallback(Callback):
     """
     text logging callback that Creates structured logs with detailed
-    formatting and multiple output files
+    formatting and multiple output files. Supports both local and remote 
+    filesystems (S3, GCS, Azure, etc.) via fsspec.
     """
     def __init__(self, log_dir: Path, experiment_name: str = "lightning_experiment", log_level: str = "INFO"):
         super().__init__()
 
         # Create experiment directory structure
         self.experiment_name = experiment_name
-        self.log_dir = Path(log_dir) / experiment_name
-        self.log_dir.mkdir(parents=True, exist_ok=True)
+        log_dir_str = str(log_dir)
+        
+        # Detect if we're using a remote filesystem (S3, GCS, etc.)
+        self.is_remote = any(log_dir_str.startswith(proto) for proto in ['s3://', 'gs://', 'gcs://', 'az://', 'adl://', 'abfs://'])
+        
+        if self.is_remote:
+            # Use fsspec for remote filesystem
+            self.log_dir = f"{log_dir_str.rstrip('/')}/{experiment_name}"
+            self.fs = fsspec.filesystem(log_dir_str.split('://')[0])
+            # Create directory on remote filesystem
+            self.fs.makedirs(self.log_dir, exist_ok=True)
+            
+            # Use local temp directory for logging.FileHandler (required for Python's logging module)
+            self.local_temp_dir = tempfile.mkdtemp(prefix=f"lightning_logs_{experiment_name}_")
+            self.local_training_log = os.path.join(self.local_temp_dir, "training.log")
+        else:
+            # Use local filesystem
+            self.log_dir = Path(log_dir) / experiment_name
+            self.log_dir.mkdir(parents=True, exist_ok=True)
+            self.fs = None
+            self.local_temp_dir = None
+            self.local_training_log = None
 
-        # Initialize log files
-        self.training_log_file = self.log_dir / "training.log"
-        self.metrics_json_file = self.log_dir / "metrics.json"
-        self.model_info_file = self.log_dir / "model_info.txt"
+        # Initialize log file paths
+        if self.is_remote:
+            self.training_log_file = f"{self.log_dir}/training.log"
+            self.metrics_json_file = f"{self.log_dir}/metrics.json"
+            self.model_info_file = f"{self.log_dir}/model_info.txt"
+        else:
+            self.training_log_file = self.log_dir / "training.log"
+            self.metrics_json_file = self.log_dir / "metrics.json"
+            self.model_info_file = self.log_dir / "model_info.txt"
 
         # Initialize metrics storage
         self.metrics_history = []
@@ -50,7 +80,20 @@ class TextLoggingCallback(Callback):
         self.logger = self._setup_logger(log_level)
 
         from src.utils.utils import get_relative_path
-        print(f"📝 text logs will be saved to: {get_relative_path(self.log_dir)}")
+        log_location = self.log_dir if not self.is_remote else self.log_dir
+        print(f"📝 text logs will be saved to: {log_location}")
+        if self.is_remote:
+            print(f"   (Using remote filesystem: {self.log_dir.split('://')[0]}://)")
+    
+    def __del__(self):
+        """Clean up temporary directory on destruction"""
+        if hasattr(self, 'is_remote') and self.is_remote and hasattr(self, 'local_temp_dir'):
+            if self.local_temp_dir and os.path.exists(self.local_temp_dir):
+                import shutil
+                try:
+                    shutil.rmtree(self.local_temp_dir)
+                except Exception:
+                    pass  # Silently fail during cleanup
 
     def _setup_logger(self, log_level: str = "INFO"):
         """Setup comprehensive logging"""
@@ -62,8 +105,10 @@ class TextLoggingCallback(Callback):
         logger.handlers.clear()
 
         # File handler for detailed logs
-        file_handler = logging.FileHandler(self.training_log_file, mode='w')
-        file_handler.setLevel(logging.DEBUG)
+        # Use local temp file if remote, otherwise use direct path
+        log_file_path = self.local_training_log if self.is_remote else str(self.training_log_file)
+        self.file_handler = logging.FileHandler(log_file_path, mode='w')
+        self.file_handler.setLevel(logging.DEBUG)
 
         # Console handler for important info
         console_handler = logging.StreamHandler()
@@ -76,14 +121,26 @@ class TextLoggingCallback(Callback):
         )
         simple_formatter = logging.Formatter('%(levelname)s: %(message)s')
 
-        file_handler.setFormatter(detailed_formatter)
+        self.file_handler.setFormatter(detailed_formatter)
         console_handler.setFormatter(simple_formatter)
 
-        logger.addHandler(file_handler)
+        logger.addHandler(self.file_handler)
         logger.addHandler(console_handler)
 
         return logger
 
+    def _sync_log_to_remote(self):
+        """Sync local log file to remote filesystem (S3, etc.)"""
+        if self.is_remote and self.local_training_log and os.path.exists(self.local_training_log):
+            try:
+                # Flush the file handler to ensure all logs are written to disk
+                if hasattr(self, 'file_handler'):
+                    self.file_handler.flush()
+                # Now sync the complete file to remote
+                self.fs.put(self.local_training_log, self.training_log_file)
+            except Exception as e:
+                print(f"⚠️  Warning: Could not sync log to remote: {e}")
+    
     def _format_metric(self, value, format_spec=".4f", default="N/A"):
         """Safely format a metric value"""
         if isinstance(value, (int, float, torch.Tensor)):
@@ -145,21 +202,32 @@ class TextLoggingCallback(Callback):
     @rank_zero_only
     def _save_model_info_to_file(self, pl_module, total_params, trainable_params):
         """Save detailed model info to separate file (only on rank 0 to avoid conflicts in DDP)"""
-        with open(self.model_info_file, 'w') as f:
-            f.write("="*80 + "\n")
-            f.write("LIGHTNING MODEL INFORMATION\n")
-            f.write(f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
-            f.write("="*80 + "\n\n")
-            
-            f.write("PARAMETERS SUMMARY:\n")
-            f.write("-"*40 + "\n")
-            f.write(f"Total Parameters: {total_params:,}\n")
-            f.write(f"Trainable Parameters: {trainable_params:,}\n")
-            f.write(f"Non-trainable Parameters: {total_params - trainable_params:,}\n\n")
-            
-            f.write("MODEL ARCHITECTURE:\n")
-            f.write("-"*40 + "\n")
-            f.write(str(pl_module.model) + "\n\n")
+        content = []
+        content.append("="*80 + "\n")
+        content.append("LIGHTNING MODEL INFORMATION\n")
+        content.append(f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+        content.append("="*80 + "\n\n")
+        
+        content.append("PARAMETERS SUMMARY:\n")
+        content.append("-"*40 + "\n")
+        content.append(f"Total Parameters: {total_params:,}\n")
+        content.append(f"Trainable Parameters: {trainable_params:,}\n")
+        content.append(f"Non-trainable Parameters: {total_params - trainable_params:,}\n\n")
+        
+        content.append("MODEL ARCHITECTURE:\n")
+        content.append("-"*40 + "\n")
+        content.append(str(pl_module.model) + "\n\n")
+        
+        content_str = "".join(content)
+        
+        if self.is_remote:
+            # Write to remote filesystem using fsspec
+            with self.fs.open(self.model_info_file, 'w') as f:
+                f.write(content_str)
+        else:
+            # Write to local filesystem
+            with open(self.model_info_file, 'w') as f:
+                f.write(content_str)
 
     def _log_training_config(self, trainer, pl_module):
         """Log training configuration (matching original style)"""
@@ -321,6 +389,9 @@ class TextLoggingCallback(Callback):
             'metrics': train_metrics,
             'timestamp': datetime.now().isoformat()
         })
+        
+        # Sync log to remote if needed
+        self._sync_log_to_remote()
 
     @rank_zero_only
     def on_validation_epoch_end(self, trainer, pl_module):
@@ -348,6 +419,9 @@ class TextLoggingCallback(Callback):
             'metrics': val_metrics,
             'timestamp': datetime.now().isoformat()
         })
+        
+        # Sync log to remote if needed
+        self._sync_log_to_remote()
 
     @rank_zero_only
     def on_test_epoch_end(self, trainer, pl_module):
@@ -381,6 +455,9 @@ class TextLoggingCallback(Callback):
             'metrics': test_metrics,
             'timestamp': datetime.now().isoformat()
         })
+        
+        # Sync log to remote if needed
+        self._sync_log_to_remote()
     
     @rank_zero_only
     def on_train_end(self, trainer, pl_module):
@@ -408,11 +485,41 @@ class TextLoggingCallback(Callback):
         # Save metrics to JSON (matching your save_metrics_to_json function)
         self._save_metrics_to_json(duration)
         
+        # Ensure all logs are flushed before final sync
+        if hasattr(self, 'file_handler'):
+            self.file_handler.flush()
+        
+        # Final sync of log file to remote if needed
+        self._sync_log_to_remote()
+        
         # Final summary
-        self.logger.info(f"💾 All logs saved to: {get_relative_path(self.log_dir)}")
-        self.logger.info(f"📄 Training log: {get_relative_path(self.training_log_file)}")
-        self.logger.info(f"📊 Metrics JSON: {get_relative_path(self.metrics_json_file)}")
-        self.logger.info(f"🔍 Model info: {get_relative_path(self.model_info_file)}")
+        if self.is_remote:
+            self.logger.info(f"💾 All logs saved to: {self.log_dir}")
+            self.logger.info(f"📄 Training log: {self.training_log_file}")
+            self.logger.info(f"📊 Metrics JSON: {self.metrics_json_file}")
+            self.logger.info(f"🔍 Model info: {self.model_info_file}")
+        else:
+            self.logger.info(f"💾 All logs saved to: {get_relative_path(self.log_dir)}")
+            self.logger.info(f"📄 Training log: {get_relative_path(self.training_log_file)}")
+            self.logger.info(f"📊 Metrics JSON: {get_relative_path(self.metrics_json_file)}")
+            self.logger.info(f"🔍 Model info: {get_relative_path(self.model_info_file)}")
+        
+        # Clean up local temp directory if using remote filesystem
+        if self.is_remote and self.local_temp_dir and os.path.exists(self.local_temp_dir):
+            # Close the file handler before cleaning up
+            if hasattr(self, 'file_handler'):
+                try:
+                    self.file_handler.close()
+                    self.logger.removeHandler(self.file_handler)
+                except Exception:
+                    pass
+            
+            import shutil
+            try:
+                shutil.rmtree(self.local_temp_dir)
+                print(f"🧹 Cleaned up temporary log directory: {self.local_temp_dir}")
+            except Exception as e:
+                print(f"⚠️  Warning: Could not clean up temp directory: {e}")
     
     @rank_zero_only
     def _save_metrics_to_json(self, duration_seconds):
@@ -443,10 +550,18 @@ class TextLoggingCallback(Callback):
             "raw_history": self.metrics_history
         }
         
-        with open(self.metrics_json_file, 'w') as f:
-            json.dump(metrics_with_meta, f, indent=2)
+        if self.is_remote:
+            # Write to remote filesystem using fsspec
+            with self.fs.open(self.metrics_json_file, 'w') as f:
+                json.dump(metrics_with_meta, f, indent=2)
+            log_location = self.metrics_json_file
+        else:
+            # Write to local filesystem
+            with open(self.metrics_json_file, 'w') as f:
+                json.dump(metrics_with_meta, f, indent=2)
+            log_location = get_relative_path(self.metrics_json_file)
         
-        self.logger.info(f"💾 Metrics saved to: {get_relative_path(self.metrics_json_file)}")
+        self.logger.info(f"💾 Metrics saved to: {log_location}")
 
     def _extract_metrics(self, trainer, pl_module, stage):
         """Extract metrics from the trainer"""

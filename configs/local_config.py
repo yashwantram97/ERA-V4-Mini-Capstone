@@ -54,7 +54,7 @@ SCHEDULER_TYPE = 'cosine_annealing_with_linear_warmup'
 ACCUMULATE_GRAD_BATCHES = 2
 # DataLoader settings - fewer workers for M4 Pro
 NUM_WORKERS = 4  # M4 Pro has good CPU but shared with training
-S3_DIR = None
+S3_DIR = "s3://imagenet-resnet-50-erav4/data/"
 
 # Precision settings
 PRECISION = "16-mixed"  # Use mixed precision for speed
