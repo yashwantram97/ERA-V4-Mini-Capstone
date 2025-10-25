@@ -241,7 +241,7 @@ class ResnetLightningModule(L.LightningModule):
             total_steps = self.trainer.estimated_stepping_batches
             
             # Define warmup phase (5% of total training steps)
-            warmup_steps = int(0.05 * total_steps)
+            warmup_steps = int(0.1 * total_steps)
             cosine_steps = total_steps - warmup_steps
             
             # Create Linear Warmup scheduler

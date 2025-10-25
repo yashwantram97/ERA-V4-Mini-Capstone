@@ -96,8 +96,9 @@ def train_with_lightning(
     # Callbacks add functionality without cluttering the main code
     print("⚙️ Setting up callbacks...")
     # Model Checkpointing - saves best models automatically
+    log_dir = config.s3_dir if config.s3_dir else config.logs_dir
     checkpoint_callback = ModelCheckpoint(
-        dirpath=config.logs_dir / config.experiment_name / "lightning_checkpoints",
+        dirpath=log_dir + config.experiment_name + "-checkpoints",
         filename="imagenet1k-{epoch:02d}-{val/accuracy:.3f}",
         monitor="val/accuracy",  # Metric to monitor
         mode="max",             # Save model with highest accuracy
@@ -118,8 +119,9 @@ def train_with_lightning(
     progress_bar = RichProgressBar()
 
     # Text Logging Callback - creates detailed text logs
+    # Use S3 for logs if configured, otherwise use local logs directory
     text_logger = TextLoggingCallback(
-        log_dir=config.logs_dir,
+        log_dir=log_dir,
         experiment_name=config.experiment_name
     )
 
@@ -140,7 +142,7 @@ def train_with_lightning(
     # 4. Setup Logger
     # Lightning integrates with many loggers (TensorBoard, Weights & Biases, etc.)
     logger = TensorBoardLogger(
-        save_dir=config.logs_dir / config.experiment_name / "lightning_logs",
+        save_dir=config.s3_dir+config.experiment_name+"/lightning_logs",
         name=config.experiment_name,
         version=None  # Auto-increment version numbers
     )
@@ -172,6 +174,7 @@ def train_with_lightning(
 
     if config.s3_dir:
         trainer_kwargs["default_root_dir"] = config.s3_dir
+        
     trainer = L.Trainer(**trainer_kwargs)
 
     # 6. Start Training!

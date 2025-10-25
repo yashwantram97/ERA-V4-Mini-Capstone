@@ -16,6 +16,82 @@ import lightning as L
 from lightning.pytorch.callbacks import Callback
 from lightning.pytorch.utilities import rank_zero_only
 
+
+def create_progressive_resize_schedule(
+    total_epochs: int,
+    target_size: int = 224,
+    initial_scale: float = 0.5,
+    delay_fraction: float = 0.5,
+    finetune_fraction: float = 0.2,
+    size_increment: int = 4,
+    use_fixres: bool = False,
+    fixres_size: int = 256
+):
+    """
+    Create a progressive resizing schedule following MosaicML Composer's approach.
+    
+    Args:
+        total_epochs: Total number of training epochs
+        target_size: Target/full resolution (e.g., 224 for ImageNet)
+        initial_scale: Starting scale factor (0.5 = 50% of target_size)
+        delay_fraction: Fraction of training to stay at initial_scale (e.g., 0.5 = first 50%)
+        finetune_fraction: Fraction of training at full size (e.g., 0.2 = last 20%)
+        size_increment: Round sizes to nearest multiple (e.g., 4 for alignment)
+        use_fixres: Whether to add a FixRes phase at the end
+        fixres_size: Resolution for FixRes phase (typically > target_size)
+    
+    Returns:
+        Dictionary mapping epoch to (resolution, use_train_augs)
+    
+    Example:
+        For 60 epochs, target_size=224, initial_scale=0.5, delay_fraction=0.5, finetune_fraction=0.2:
+        - Epochs 0-29 (50%): 112px (initial scale)
+        - Epochs 30-47 (30%): Progressive 112px → 224px
+        - Epochs 48-59 (20%): 224px (fine-tune)
+    """
+    # Calculate epoch boundaries
+    delay_epochs = int(total_epochs * delay_fraction)
+    finetune_start_epoch = total_epochs - int(total_epochs * finetune_fraction)
+    
+    # Calculate initial size (rounded to size_increment)
+    initial_size = int(target_size * initial_scale)
+    initial_size = (initial_size // size_increment) * size_increment
+    
+    # Number of epochs for progressive phase
+    progressive_epochs = finetune_start_epoch - delay_epochs
+    
+    schedule = {}
+    
+    # Phase 1: Delay phase - stay at initial scale
+    if delay_epochs > 0:
+        schedule[0] = (initial_size, True)
+    
+    # Phase 2: Progressive phase - linearly increase resolution
+    if progressive_epochs > 0:
+        for epoch in range(delay_epochs, finetune_start_epoch):
+            # Linear interpolation from initial_size to target_size
+            progress = (epoch - delay_epochs) / progressive_epochs
+            current_size = initial_size + int(progress * (target_size - initial_size))
+            
+            # Round to nearest multiple of size_increment
+            current_size = round(current_size / size_increment) * size_increment
+            current_size = min(current_size, target_size)  # Cap at target
+            
+            # Only add to schedule if size changes
+            if epoch == delay_epochs or current_size != schedule[list(schedule.keys())[-1]][0]:
+                schedule[epoch] = (current_size, True)
+    
+    # Phase 3: Fine-tune phase - full resolution
+    if finetune_start_epoch < total_epochs:
+        schedule[finetune_start_epoch] = (target_size, True)
+    
+    # Optional Phase 4: FixRes phase - even higher resolution with test augmentations
+    if use_fixres:
+        fixres_start = total_epochs - max(1, int(total_epochs * 0.1))  # Last 10% for FixRes
+        schedule[fixres_start] = (fixres_size, False)  # False = use test augmentations
+    
+    return schedule
+
 class ResolutionScheduleCallback(Callback):
     """
     Dynamically adjust image resolution and augmentation strategy during training.
@@ -47,7 +123,7 @@ class ResolutionScheduleCallback(Callback):
                 msg = f"\n{'='*60}\n"
                 msg += f"📐 Resolution Schedule - Epoch {current_epoch}\n"
                 msg += f"   Resolution: {size}x{size}px\n"
-                msg += f"   Augmentation: {'Train (RandomResizedCrop + Flip)' if use_train_augs else 'Test (Resize + CenterCrop) - FixRes'}\n"
+                msg += f"   Augmentation: {'Train (RandomResizedCrop + Flip + TrivialAugmentWide + RandomErasing)' if use_train_augs else 'Test (Resize + CenterCrop) - FixRes'}\n"
                 msg += f"{'='*60}"
                 print(msg)
 
