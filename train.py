@@ -98,7 +98,7 @@ def train_with_lightning(
     # Model Checkpointing - saves best models automatically
     log_dir = config.s3_dir if config.s3_dir else config.logs_dir
     checkpoint_callback = ModelCheckpoint(
-        dirpath=log_dir + config.experiment_name + "lightning_checkpoints",
+        dirpath=log_dir + config.experiment_name + "-checkpoints",
         filename="imagenet1k-{epoch:02d}-{val/accuracy:.3f}",
         monitor="val/accuracy",  # Metric to monitor
         mode="max",             # Save model with highest accuracy
