@@ -10,11 +10,12 @@ Hardware Specs:
 Optimizations:
 - Lower batch sizes to fit in memory
 - Fewer workers (CPU cores shared between data loading and training)
-- Smaller resolutions in progressive resizing
+- Progressive resizing following MosaicML Composer's proven approach
 - Mixed precision for faster training
 """
 
 from pathlib import Path
+from src.callbacks import create_progressive_resize_schedule
 
 # Get the project root directory
 PROJECT_ROOT = Path(__file__).parent.parent
@@ -35,7 +36,7 @@ NUM_DEVICES = 1
 # Dataset settings
 DATASET_SIZE = 130000  # ImageNet-mini train size
 NUM_CLASSES = 100
-INPUT_SIZE = (1, 3, 224, 224)
+INPUT_SIZE = (1, 3, 256, 256)
 
 # Normalization constants (ImageNet standard)
 MEAN = (0.485, 0.456, 0.406)
@@ -46,25 +47,40 @@ EXPERIMENT_NAME = "imagenet_local_dev"
 
 # Training settings
 EPOCHS = 60
-BATCH_SIZE = 64  # Optimized for M4 Pro MPS with mixed precision
+BATCH_SIZE = 128  # Optimized for M4 Pro MPS with mixed precision
 LEARNING_RATE = 0.25  # Found with LR finder
 WEIGHT_DECAY = 1e-4
 SCHEDULER_TYPE = 'cosine_annealing_with_linear_warmup'
-ACCUMULATE_GRAD_BATCHES = 1
+ACCUMULATE_GRAD_BATCHES = 2
 # DataLoader settings - fewer workers for M4 Pro
 NUM_WORKERS = 4  # M4 Pro has good CPU but shared with training
-S3_DIR=None
+S3_DIR = "s3://imagenet-resnet-50-erav4/data/"
 
 # Precision settings
 PRECISION = "16-mixed"  # Use mixed precision for speed
 
-# Progressive Resizing + FixRes Schedule
-# Optimized for 60 epochs total
-PROG_RESIZING_FIXRES_SCHEDULE = {
-    0: (128, True),    # Epochs 0-9: 128px, train augs (17% - fast initial learning)
-    10: (224, True),   # Epochs 10-49: 224px, train augs (67% - main training phase)
-    50: (288, False),  # Epochs 50-59: 288px, test augs (17% - FixRes fine-tuning)
-}
+# Progressive Resizing Schedule (Improved Approach)
+# Updated from MosaicML's original 112px start to better initial resolution:
+# - initial_scale = 0.64: Start at 64% resolution (144px for target 224px) - BETTER than 112px
+# - delay_fraction = 0.3: Stay at initial scale for first 30% of training (shorter delay)
+# - finetune_fraction = 0.3: Train at full resolution for last 30% (longer fine-tune)
+# - size_increment = 4: Round sizes to multiples of 4 for alignment
+#
+# Why 144px instead of 112px?
+# • 112px loses too much visual detail for ImageNet classification
+# • 144px provides better feature learning from the start
+# • Shorter delay phase allows more time at full resolution
+# • Longer fine-tune phase improves final accuracy
+PROG_RESIZING_FIXRES_SCHEDULE = create_progressive_resize_schedule(
+    total_epochs=EPOCHS,
+    target_size=224,          # Standard ImageNet resolution
+    initial_scale=0.64,       # Start at 64% (144px) - IMPROVED from 0.5
+    delay_fraction=0.3,       # First 30% at initial scale - IMPROVED from 0.5
+    finetune_fraction=0.3,    # Last 30% at full size - IMPROVED from 0.2
+    size_increment=4,         # Round to multiples of 4
+    use_fixres=True,         # Disable FixRes for local dev (faster)
+    fixres_size=256           # Higher resolution for FixRes phase
+)
 
 # Early stopping for faster iteration during development
 EARLY_STOPPING_PATIENCE = 3

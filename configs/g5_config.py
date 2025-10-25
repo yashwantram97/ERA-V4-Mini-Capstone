@@ -10,11 +10,12 @@ Hardware Specs:
 Optimizations:
 - Moderate to high batch sizes (A10G has 24GB VRAM)
 - Good number of workers (plenty of CPU cores)
-- Full resolution schedule for best quality
+- Progressive resizing following MosaicML Composer's proven approach
 - Mixed precision for optimal A10G utilization
 """
 
 from pathlib import Path
+from src.callbacks import create_progressive_resize_schedule
 
 # Get the project root directory
 PROJECT_ROOT = Path(__file__).parent.parent
@@ -24,8 +25,8 @@ PROFILE_NAME = "g5"
 PROFILE_DESCRIPTION = "AWS g5.12xlarge - 4x NVIDIA A10G GPUs"
 
 # Dataset paths (AWS EC2 environment)
-TRAIN_IMG_DIR = Path("/mnt/nvme-instance/ImageNet100/train")
-VAL_IMG_DIR = Path("/mnt/nvme-instance/ImageNet100/val")
+TRAIN_IMG_DIR = Path("/mnt/nvme1/ImageNet100/train")
+VAL_IMG_DIR = Path("/mnt/nvme1/ImageNet100/val")
 
 # Logs directory
 LOGS_DIR = PROJECT_ROOT / "logs"
@@ -33,7 +34,7 @@ LOGS_DIR = PROJECT_ROOT / "logs"
 # Dataset settings (full ImageNet)
 DATASET_SIZE = 130000  # Full ImageNet-1K train size
 NUM_CLASSES = 100
-INPUT_SIZE = (1, 3, 224, 224)
+INPUT_SIZE = (1, 3, 256, 256)
 
 # Normalization constants (ImageNet standard)
 MEAN = (0.485, 0.456, 0.406)
@@ -46,7 +47,7 @@ EXPERIMENT_NAME = "imagenet_g5d_training"
 EPOCHS = 60
 BATCH_SIZE = 128  # Good starting point for A10G with 24GB
 ACCUMULATE_GRAD_BATCHES = 4
-LEARNING_RATE = 0.25  # Found with LR finder
+LEARNING_RATE = 0.8  # Found with LR finder
 WEIGHT_DECAY =  5e-4
 SCHEDULER_TYPE = 'cosine_annealing_with_linear_warmup'
 S3_DIR = "s3://imagenet-resnet-50-erav4/data/"
@@ -59,13 +60,33 @@ NUM_WORKERS = 4  # 4 workers per GPU process (reasonable for DDP)
 # Precision settings
 PRECISION = "16-mixed"  # A10G benefits from mixed precision
 
-# Progressive Resizing + FixRes Schedule
-# Optimized for 60 epochs on 4x A10G GPUs with batch size 128
-PROG_RESIZING_FIXRES_SCHEDULE = {
-    0: (128, True),    # Epochs 0-9: 128px, train augs (17% - fast initial learning)
-    10: (224, True),   # Epochs 10-49: 224px, train augs (67% - main training phase)
-    50: (256, True),  # Epochs 50-59: 256px, test augs (17% - FixRes fine-tuning)
-}
+# Progressive Resizing Schedule (Improved Approach)
+# Updated from MosaicML's original 112px start to better initial resolution:
+# - initial_scale = 0.64: Start at 64% resolution (144px for target 224px) - BETTER than 112px
+# - delay_fraction = 0.3: Stay at initial scale for first 30% of training (shorter delay)
+# - finetune_fraction = 0.3: Train at full resolution for last 30% (longer fine-tune)
+# - size_increment = 4: Round sizes to multiples of 4 for alignment
+#
+# Why 144px instead of 112px?
+# • 112px loses too much visual detail for ImageNet classification
+# • 144px provides better feature learning from the start
+# • Shorter delay phase allows more time at full resolution
+# • Longer fine-tune phase improves final accuracy
+#
+# Schedule breakdown for 60 epochs:
+# - Epochs 0-17 (30%): 144px - Better feature learning from start
+# - Epochs 18-41 (40%): 144→224px - Progressive curriculum learning
+# - Epochs 42-59 (30%): 224px - Extended fine-tune at full resolution
+PROG_RESIZING_FIXRES_SCHEDULE = create_progressive_resize_schedule(
+    total_epochs=EPOCHS,
+    target_size=224,          # Standard ImageNet resolution
+    initial_scale=0.64,       # Start at 64% (144px) - IMPROVED from 0.5
+    delay_fraction=0.3,       # First 30% at initial scale - IMPROVED from 0.5
+    finetune_fraction=0.3,    # Last 30% at full size - IMPROVED from 0.2
+    size_increment=4,         # Round to multiples of 4
+    use_fixres=True,         # Enable FixRes for +1-2% accuracy boost
+    fixres_size=256           # Higher resolution for FixRes phase
+)
 
 # Early stopping - more patience for full training
 EARLY_STOPPING_PATIENCE = 10
