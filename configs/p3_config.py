@@ -46,7 +46,7 @@ STD = (0.229, 0.224, 0.225)
 EXPERIMENT_NAME = "imagenet_p3_training"
 
 # Training settings
-EPOCHS = 60
+EPOCHS = 120
 BATCH_SIZE = 256  # Per GPU: 256, Total effective: 256 * 8 = 2048
 LEARNING_RATE = 2.11e-3  # Found with LR finder
 WEIGHT_DECAY = 1e-4
