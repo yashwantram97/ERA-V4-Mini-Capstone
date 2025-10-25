@@ -44,7 +44,7 @@ STD = (0.229, 0.224, 0.225)
 EXPERIMENT_NAME = "imagenet_g5d_training"
 
 # Training settings
-EPOCHS = 60
+EPOCHS = 120
 BATCH_SIZE = 128  # Good starting point for A10G with 24GB
 ACCUMULATE_GRAD_BATCHES = 4
 LEARNING_RATE = 0.8  # Found with LR finder
