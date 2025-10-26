@@ -108,10 +108,60 @@ class ResolutionScheduleCallback(Callback):
         super().__init__()
         self.schedule = schedule
         self._last_applied_epoch = -1
+        self._resume_handled = False
+
+    def _get_resolution_for_epoch(self, epoch: int):
+        """
+        Get the correct resolution for a given epoch.
+        Handles cases where epoch isn't explicitly in schedule.
+        
+        Args:
+            epoch: Current epoch number
+            
+        Returns:
+            Tuple of (resolution, use_train_augs) or None if before first schedule entry
+        """
+        # Find the most recent schedule entry at or before this epoch
+        applicable_epochs = [e for e in sorted(self.schedule.keys()) if e <= epoch]
+        
+        if not applicable_epochs:
+            return None
+            
+        latest_epoch = max(applicable_epochs)
+        return self.schedule[latest_epoch]
 
     def on_train_epoch_start(self, trainer: L.Trainer, pl_module: L.LightningModule):
         """Called at the start of each training epoch"""
         current_epoch = trainer.current_epoch
+        
+        # Handle checkpoint resume: ensure correct resolution on first resumed epoch
+        if not self._resume_handled and current_epoch > 0:
+            # This is a resume (not starting from epoch 0)
+            correct_config = self._get_resolution_for_epoch(current_epoch)
+            
+            if correct_config is not None:
+                size, use_train_augs = correct_config
+                
+                if trainer.is_global_zero:
+                    msg = f"\n{'='*60}\n"
+                    msg += f"🔄 CHECKPOINT RESUME - Restoring Resolution State\n"
+                    msg += f"   Resumed at epoch: {current_epoch}\n"
+                    msg += f"   Expected resolution: {size}x{size}px\n"
+                    msg += f"   Augmentation: {'Train' if use_train_augs else 'Test (FixRes)'}\n"
+                    msg += f"{'='*60}"
+                    print(msg)
+                
+                # Force update to correct resolution
+                if hasattr(trainer, 'datamodule') and trainer.datamodule is not None:
+                    trainer.datamodule.update_resolution(size, use_train_augs)
+                    
+                    if trainer.is_global_zero:
+                        self._verify_dataloader_changes(trainer, size)
+                    
+                    if hasattr(trainer.strategy, 'barrier'):
+                        trainer.strategy.barrier()
+            
+            self._resume_handled = True
         
         # Check if we need to apply a schedule change
         if current_epoch in self.schedule:

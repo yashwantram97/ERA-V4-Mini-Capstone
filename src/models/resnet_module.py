@@ -238,9 +238,12 @@ class ResnetLightningModule(L.LightningModule):
             # CosineAnnealingLR scheduler with linear warmup
             # Calculate total steps for step-based scheduling
             # Note: estimated_stepping_batches already accounts for all epochs
+            # IMPORTANT: This is actual optimizer steps, not batch iterations
+            # With gradient accumulation, optimizer steps = batches / accumulate_grad_batches
             total_steps = self.trainer.estimated_stepping_batches
             
-            # Define warmup phase (5% of total training steps)
+            # Define warmup phase (10% of total training - increased for stability)
+            # Longer warmup helps with large batch sizes and high learning rates
             warmup_steps = int(0.1 * total_steps)
             cosine_steps = total_steps - warmup_steps
             
