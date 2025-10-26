@@ -109,10 +109,10 @@ def train_with_lightning(
 
     # Early Stopping - stops training if no improvement
     early_stop_callback = EarlyStopping(
-        monitor="val/loss",     # Metric to monitor
+        monitor="val/accuracy",  # Metric to monitor (changed from val/loss to val/accuracy)
         patience=config.early_stopping_patience,
         verbose=True,
-        mode="min"             # Stop when val_loss stops decreasing
+        mode="max"              # Stop when val_accuracy stops increasing (changed from min)
     )
 
     # Rich Progress Bar - beautiful progress bars

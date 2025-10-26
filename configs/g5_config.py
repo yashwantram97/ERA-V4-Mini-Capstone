@@ -89,7 +89,7 @@ PROG_RESIZING_FIXRES_SCHEDULE = create_progressive_resize_schedule(
 )
 
 # Early stopping - more patience for full training
-EARLY_STOPPING_PATIENCE = 10
+EARLY_STOPPING_PATIENCE = 20
 
 # Checkpointing
 SAVE_TOP_K = 1  # Save top 3 models
