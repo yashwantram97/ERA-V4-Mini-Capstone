@@ -33,6 +33,8 @@ from src.callbacks.text_logging_callback import TextLoggingCallback
 from src.callbacks.resolution_schedule_callback import ResolutionScheduleCallback
 from lightning.pytorch.utilities import rank_zero_only
 
+from time import time
+
 # Import new config system
 from configs import get_config, list_configs, ConfigProfile
 
@@ -98,7 +100,7 @@ def train_with_lightning(
     # Model Checkpointing - saves best models automatically
     log_dir = config.s3_dir if config.s3_dir else config.logs_dir
     checkpoint_callback = ModelCheckpoint(
-        dirpath=log_dir + config.experiment_name + "-checkpoints",
+        dirpath=log_dir + config.experiment_name + "-checkpoints-"+str(time()),
         filename="imagenet1k-{epoch:02d}-{val/accuracy:.3f}",
         monitor="val/accuracy",  # Metric to monitor
         mode="max",             # Save model with highest accuracy
