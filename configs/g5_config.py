@@ -32,8 +32,8 @@ VAL_IMG_DIR = Path("/mnt/nvme1/imagenet1k/val")
 LOGS_DIR = PROJECT_ROOT / "logs"
 
 # Dataset settings (full ImageNet)
-DATASET_SIZE = 130000  # Full ImageNet-1K train size
-NUM_CLASSES = 100
+DATASET_SIZE = 1281167  # Full ImageNet-1K train size
+NUM_CLASSES = 1000
 INPUT_SIZE = (1, 3, 256, 256)
 
 # Normalization constants (ImageNet standard)
