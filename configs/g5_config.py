@@ -25,8 +25,8 @@ PROFILE_NAME = "g5"
 PROFILE_DESCRIPTION = "AWS g5.12xlarge - 4x NVIDIA A10G GPUs"
 
 # Dataset paths (AWS EC2 environment)
-TRAIN_IMG_DIR = Path("/mnt/nvme1/ImageNet100/train")
-VAL_IMG_DIR = Path("/mnt/nvme1/ImageNet100/val")
+TRAIN_IMG_DIR = Path("/mnt/nvme1/imagenet1k/train")
+VAL_IMG_DIR = Path("/mnt/nvme1/imagenet1k/val")
 
 # Logs directory
 LOGS_DIR = PROJECT_ROOT / "logs"
@@ -45,8 +45,8 @@ EXPERIMENT_NAME = "imagenet_g5d_training"
 
 # Training settings
 EPOCHS = 120
-BATCH_SIZE = 128  # Good starting point for A10G with 24GB
-ACCUMULATE_GRAD_BATCHES = 4
+BATCH_SIZE = 64  # Good starting point for A10G with 24GB
+ACCUMULATE_GRAD_BATCHES = 8
 LEARNING_RATE = 0.8  # Found with LR finder
 WEIGHT_DECAY =  5e-4
 SCHEDULER_TYPE = 'cosine_annealing_with_linear_warmup'
