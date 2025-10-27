@@ -143,9 +143,9 @@ def main():
     print_schedule(fixres_schedule, "60 Epochs - With FixRes Phase")
     
     # Test 3: Different settings (100 epochs)
-    print("\n\n🎯 Alternative: 120 Epochs Training")
+    print("\n\n🎯 Alternative: 90 Epochs Training")
     long_schedule = create_progressive_resize_schedule(
-        total_epochs=120,
+        total_epochs=90,
         target_size=224,          # Standard ImageNet resolution
         initial_scale=0.64,       # Start at 64% (144px) - IMPROVED from 0.5
         delay_fraction=0.3,       # First 30% at initial scale - IMPROVED from 0.5
@@ -154,7 +154,7 @@ def main():
         use_fixres=True,         # Disable FixRes for local dev (faster)
         fixres_size=256   
     )
-    print_schedule(long_schedule, "120 Epochs - Extended Training")
+    print_schedule(long_schedule, "90 Epochs - Extended Training")
     
     # Test 4: More aggressive (faster ramp-up)
     print("\n\n🎯 Aggressive: Faster Ramp-Up")
