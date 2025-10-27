@@ -24,7 +24,7 @@ def get_transforms(transform_type="train", mean=None, std=None, resolution=224):
             T.ToTensor(),
             T.Normalize(mean=mean, std=std),
             # RandomErasing (PyTorch's Cutout/CoarseDropout equivalent)
-            T.RandomErasing(p=0.25, scale=(0.02, 0.33), ratio=(0.3, 3.3), value='random'),
+            # T.RandomErasing(p=0.25, scale=(0.02, 0.33), ratio=(0.3, 3.3), value='random'),
         ])
     else:
         # Validation/Test transforms - FixRes compatible
