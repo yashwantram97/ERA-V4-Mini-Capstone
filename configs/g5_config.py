@@ -128,7 +128,7 @@ ONECYCLE_KWARGS = {
 # MixUp/CutMix settings (timm implementation)
 MIXUP_KWARGS = {
     'mixup_alpha': 0.2,      # MixUp alpha (0.0 = disabled, 0.2-1.0 recommended)
-    'cutmix_alpha': 1.0,     # CutMix alpha (0.0 = disabled)
+    'cutmix_alpha': 0.0,     # CutMix alpha (0.0 = disabled)
     'cutmix_minmax': None,   # CutMix min/max ratio
     'prob': 1.0,             # Probability of applying mixup/cutmix
     'switch_prob': 0.5,      # Probability of switching to cutmix when both enabled
