@@ -44,12 +44,12 @@ STD = (0.229, 0.224, 0.225)
 EXPERIMENT_NAME = "imagenet_g5d_training"
 
 # Training settings
-EPOCHS = 120  # Extended for better convergence on ImageNet-1K
+EPOCHS = 90  # Extended for better convergence on ImageNet-1K
 BATCH_SIZE = 128  # Good starting point for A10G with 24GB
 ACCUMULATE_GRAD_BATCHES = 2
-LEARNING_RATE = 0.125  # Reduced for better stability on ImageNet-1K (was 0.2)
+LEARNING_RATE = 0.15  # Reduced for better stability on ImageNet-1K (was 0.2)
 WEIGHT_DECAY =  5e-4
-SCHEDULER_TYPE = 'cosine_annealing_with_linear_warmup'
+SCHEDULER_TYPE = 'one_cycle_policy'
 S3_DIR = "s3://imagenet-resnet-50-erav4/data/"
 
 # DataLoader settings - plenty of CPU cores available
@@ -127,7 +127,7 @@ ONECYCLE_KWARGS = {
 
 # MixUp/CutMix settings (timm implementation)
 MIXUP_KWARGS = {
-    'mixup_alpha': 0.2,      # MixUp alpha (0.0 = disabled, 0.2-1.0 recommended)
+    'mixup_alpha': 0.4,      # MixUp alpha (0.0 = disabled, 0.2-1.0 recommended)
     'cutmix_alpha': 0.0,     # CutMix alpha (0.0 = disabled)
     'cutmix_minmax': None,   # CutMix min/max ratio
     'prob': 1.0,             # Probability of applying mixup/cutmix
