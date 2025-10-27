@@ -44,10 +44,10 @@ STD = (0.229, 0.224, 0.225)
 EXPERIMENT_NAME = "imagenet_g5d_training"
 
 # Training settings
-EPOCHS = 120
+EPOCHS = 90
 BATCH_SIZE = 128  # Good starting point for A10G with 24GB
-ACCUMULATE_GRAD_BATCHES = 4
-LEARNING_RATE = 0.4  # Found with LR finder
+ACCUMULATE_GRAD_BATCHES = 2
+LEARNING_RATE = 0.2  # Found with LR finder
 WEIGHT_DECAY =  5e-4
 SCHEDULER_TYPE = 'cosine_annealing_with_linear_warmup'
 S3_DIR = "s3://imagenet-resnet-50-erav4/data/"
