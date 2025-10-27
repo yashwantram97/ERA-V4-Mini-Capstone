@@ -159,13 +159,13 @@ def main():
     # Test 4: More aggressive (faster ramp-up)
     print("\n\n🎯 Aggressive: Faster Ramp-Up")
     aggressive_schedule = create_progressive_resize_schedule(
-        total_epochs=60,
+        total_epochs=120,
         target_size=224,          # Standard ImageNet resolution
         initial_scale=0.64,       # Start at 64% (144px) - IMPROVED from 0.5
-        delay_fraction=0.3,       # First 30% at initial scale - IMPROVED from 0.5
-        finetune_fraction=0.3,    # Last 30% at full size - IMPROVED from 0.2
+        delay_fraction=0.17,       # First 30% at initial scale - IMPROVED from 0.5
+        finetune_fraction=0.4,    # Last 30% at full size - IMPROVED from 0.2
         size_increment=4,         # Round to multiples of 4
-        use_fixres=False,         # Disable FixRes for local dev (faster)
+        use_fixres=True,         # Disable FixRes for local dev (faster)
         fixres_size=256   
     )
     print_schedule(aggressive_schedule, "60 Epochs - Faster Ramp-Up (30% delay, 30% finetune)")
