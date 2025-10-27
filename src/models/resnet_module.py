@@ -207,12 +207,12 @@ class ResnetLightningModule(L.LightningModule):
                 optimizer,
                 max_lr=self.learning_rate,        
                 steps=total_steps,
-                pct_start=0.3,          
+                pct_start=0.2,          
                 anneal_strategy='cos',
                 cycle_momentum=True,
                 base_momentum=0.85,
                 max_momentum=0.95,
-                div_factor=25.0,
+                div_factor=100.0,
                 final_div_factor=1000.0
             )
             
