@@ -21,7 +21,7 @@ import torch
 import torch.nn.functional as F
 import torchmetrics
 from timm.data.mixup import Mixup
-from config import scheduler_type
+from config import scheduler_type, onecycle_kwargs
 import copy
 from torchinfo import summary
 from lightning.pytorch.utilities import rank_zero_only
@@ -201,29 +201,45 @@ class ResnetLightningModule(L.LightningModule):
             # This is available during configure_optimizers and accounts for all training settings
             total_steps = self.trainer.estimated_stepping_batches
             
-            # Create OneCycle scheduler with EXACT parameters
-            # This was setup in notebook by running set up ocp function
+            # Get OneCycle parameters from config
+            pct_start = onecycle_kwargs.get('pct_start', 0.3)
+            div_factor = onecycle_kwargs.get('div_factor', 50.0)
+            final_div_factor = onecycle_kwargs.get('final_div_factor', 1000.0)
+            anneal_strategy = onecycle_kwargs.get('anneal_strategy', 'cos')
+            
+            # Create OneCycle scheduler with parameters from config
             scheduler = torch.optim.lr_scheduler.OneCycleLR(
                 optimizer,
                 max_lr=self.learning_rate,        
-                steps=total_steps,
-                pct_start=0.3,          
-                anneal_strategy='cos',
+                total_steps=total_steps,  # Fixed: was 'steps', should be 'total_steps'
+                pct_start=pct_start,          
+                anneal_strategy=anneal_strategy,
                 cycle_momentum=True,
                 base_momentum=0.85,
                 max_momentum=0.95,
-                div_factor=50.0,
-                final_div_factor=1000.0
+                div_factor=div_factor,
+                final_div_factor=final_div_factor
             )
             
-            print(f"🔄 Recreated OneCycleLR Scheduler:")
+            # Calculate helpful metrics for debugging
+            steps_per_epoch = total_steps / self.trainer.max_epochs
+            max_lr_step = int(total_steps * pct_start)
+            max_lr_epoch = max_lr_step / steps_per_epoch
+            
+            print(f"🔄 Created OneCycleLR Scheduler:")
             print(f"   Max LR: {self.learning_rate:.4e}")
-            print(f"   Initial LR: {self.learning_rate/100.0:.4e}")
+            print(f"   Initial LR: {self.learning_rate/div_factor:.4e}")
+            print(f"   Final LR: {self.learning_rate/(div_factor*final_div_factor):.4e}")
             print(f"   Total steps: {total_steps}")
+            print(f"   Steps per epoch: {steps_per_epoch:.1f}")
+            print(f"   Total epochs: {self.trainer.max_epochs}")
             print(f"   Num devices: {self.trainer.num_devices}")
+            print(f"   Accumulate grad batches: {self.trainer.accumulate_grad_batches}")
             print(f"   Strategy: {self.trainer.strategy.__class__.__name__}")
-            print(f"   Pct start: {0.2}")
-            print(f"   Div factor: {100.0}")
+            print(f"   Pct start: {pct_start}")
+            print(f"   Div factor: {div_factor}")
+            print(f"   Final div factor: {final_div_factor}")
+            print(f"   Max LR reached at step: {max_lr_step} (≈ epoch {max_lr_epoch:.1f})")
             
             return {
                 "optimizer": optimizer,
