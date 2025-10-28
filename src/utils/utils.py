@@ -21,6 +21,7 @@ def get_transforms(transform_type="train", mean=None, std=None, resolution=224):
         transforms = T.Compose([
             T.RandomResizedCrop(resolution, scale=(0.08, 1.0)),
             T.RandomHorizontalFlip(),
+            # T.TrivialAugmentWide(),
             T.ColorJitter(brightness=0.4, contrast=0.4, saturation=0.4, hue=0.1),
             T.ToTensor(),
             T.Normalize(mean=mean, std=std),
