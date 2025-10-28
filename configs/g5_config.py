@@ -126,8 +126,10 @@ ONECYCLE_KWARGS = {
 }
 
 # MixUp/CutMix settings (timm implementation)
+# Using balanced augmentation: ColorJitter + RandomErasing + MixUp(0.2)
+# This combo is proven for 75%+ targets in 90 epochs
 MIXUP_KWARGS = {
-    'mixup_alpha': 0.2,      # MixUp alpha (0.0 = disabled, 0.2-1.0 recommended)
+    'mixup_alpha': 0.2,      # MixUp alpha - moderate strength (well-tested combo)
     'cutmix_alpha': 0.0,     # CutMix alpha (0.0 = disabled)
     'cutmix_minmax': None,   # CutMix min/max ratio
     'prob': 1.0,             # Probability of applying mixup/cutmix

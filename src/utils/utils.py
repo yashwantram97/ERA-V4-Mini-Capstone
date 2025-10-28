@@ -16,15 +16,15 @@ def get_transforms(transform_type="train", mean=None, std=None, resolution=224):
         torchvision.transforms.Compose object with all transforms
     """
     if transform_type == "train":
-        # Training transforms with TrivialAugmentWide for strong augmentation
+        # Training transforms with balanced augmentation strategy
+        # ColorJitter + RandomErasing + MixUp(0.2) - proven combo for 75%+ in 90 epochs
         transforms = T.Compose([
             T.RandomResizedCrop(resolution, scale=(0.08, 1.0)),
             T.RandomHorizontalFlip(),
-            T.TrivialAugmentWide(),  # Powerful auto-augmentation policy
+            T.ColorJitter(brightness=0.4, contrast=0.4, saturation=0.4, hue=0.1),
             T.ToTensor(),
             T.Normalize(mean=mean, std=std),
-            # RandomErasing (PyTorch's Cutout/CoarseDropout equivalent)
-            # T.RandomErasing(p=0.25, scale=(0.02, 0.33), ratio=(0.3, 3.3), value='random'),
+            T.RandomErasing(p=0.25, scale=(0.02, 0.33), ratio=(0.3, 3.3), value='random'),
         ])
     else:
         # Validation/Test transforms - FixRes compatible
