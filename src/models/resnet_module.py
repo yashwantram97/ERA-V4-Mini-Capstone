@@ -21,7 +21,6 @@ import torch
 import torch.nn.functional as F
 import torchmetrics
 from timm.data.mixup import Mixup
-from config import scheduler_type, onecycle_kwargs
 import copy
 from torchinfo import summary
 from lightning.pytorch.utilities import rank_zero_only
@@ -45,13 +44,17 @@ class ResnetLightningModule(L.LightningModule):
         num_classes: int = 100,
         train_transforms = None,
         # total_steps: int = None,
-        mixup_kwargs: dict = None
+        mixup_kwargs: dict = None,
+        scheduler_type: str = 'one_cycle_policy',
+        onecycle_kwargs: dict = None
         ):
         super().__init__()
         # Store hyperparameters
         self.learning_rate = learning_rate
         self.weight_decay = weight_decay
         self.num_classes = num_classes
+        self.scheduler_type = scheduler_type
+        self.onecycle_kwargs = onecycle_kwargs if onecycle_kwargs is not None else {}
         # self.total_steps = total_steps
         # Store transforms for hyperparameter logging
         self.train_transforms = train_transforms
@@ -196,16 +199,16 @@ class ResnetLightningModule(L.LightningModule):
             momentum=0.9
             )
         
-        if scheduler_type == 'one_cycle_policy':
+        if self.scheduler_type == 'one_cycle_policy':
             # Calculate steps per epoch using Lightning's estimated_stepping_batches
             # This is available during configure_optimizers and accounts for all training settings
             total_steps = self.trainer.estimated_stepping_batches
             
-            # Get OneCycle parameters from config
-            pct_start = onecycle_kwargs.get('pct_start', 0.3)
-            div_factor = onecycle_kwargs.get('div_factor', 50.0)
-            final_div_factor = onecycle_kwargs.get('final_div_factor', 1000.0)
-            anneal_strategy = onecycle_kwargs.get('anneal_strategy', 'cos')
+            # Get OneCycle parameters from config (passed as constructor argument)
+            pct_start = self.onecycle_kwargs.get('pct_start', 0.3)
+            div_factor = self.onecycle_kwargs.get('div_factor', 50.0)
+            final_div_factor = self.onecycle_kwargs.get('final_div_factor', 1000.0)
+            anneal_strategy = self.onecycle_kwargs.get('anneal_strategy', 'cos')
             
             # Create OneCycle scheduler with parameters from config
             scheduler = torch.optim.lr_scheduler.OneCycleLR(
@@ -250,7 +253,7 @@ class ResnetLightningModule(L.LightningModule):
                     "name": "OneCycleLR"
                 }
             }
-        elif scheduler_type == 'cosine_annealing_with_linear_warmup':
+        elif self.scheduler_type == 'cosine_annealing_with_linear_warmup':
             # CosineAnnealingLR scheduler with linear warmup
             # Calculate total steps for step-based scheduling
             # Note: estimated_stepping_batches already accounts for all epochs
