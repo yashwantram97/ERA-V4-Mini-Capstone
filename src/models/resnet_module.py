@@ -144,7 +144,7 @@ class ResnetLightningModule(L.LightningModule):
             loss = F.cross_entropy(logits, labels)
         else:
             # Hard labels - apply label smoothing
-            loss = F.cross_entropy(logits, labels, label_smoothing=0.1)
+            loss = F.cross_entropy(logits, labels, label_smoothing=0.08)
         
         # Update metrics (convert soft labels back to hard labels for accuracy calculation)
         if self.mixup_cutmix_fn is not None:
