@@ -59,27 +59,35 @@ S3_DIR = "s3://imagenet-resnet-50-erav4/data/"
 # Precision settings
 PRECISION = "16-mixed"  # Use mixed precision for speed
 
-# Progressive Resizing Schedule (Improved Approach)
-# Updated from MosaicML's original 112px start to better initial resolution:
-# - initial_scale = 0.64: Start at 64% resolution (144px for target 224px) - BETTER than 112px
-# - delay_fraction = 0.3: Stay at initial scale for first 30% of training (shorter delay)
-# - finetune_fraction = 0.3: Train at full resolution for last 30% (longer fine-tune)
-# - size_increment = 4: Round sizes to multiples of 4 for alignment
+# Progressive Resizing + FixRes Schedule (Local Development)
+# This is a lightweight schedule for local development and testing
 #
-# Why 144px instead of 112px?
-# • 112px loses too much visual detail for ImageNet classification
-# • 144px provides better feature learning from the start
-# • Shorter delay phase allows more time at full resolution
-# • Longer fine-tune phase improves final accuracy
+# Progressive Resizing:
+# • Start at 64% resolution (144px) for faster initial training
+# • Progress to 224px for fine-tuning
+# • Total speedup: ~30% faster than full resolution throughout
+#
+# FixRes (Optional for local):
+# • Fine-tune at 256px with minimal augmentation
+# • Bridges train-test distribution gap
+# • Expected: +1-2% accuracy improvement
+# • Can disable for faster local iteration (set use_fixres=False)
+#
+# Schedule for 10 epochs (local dev):
+# - Epochs 0-2 (30%): 144px, train mode
+# - Epochs 3-6 (40%): 144→224px, train mode  
+# - Epochs 7-8 (20%): 224px, train mode
+# - Epochs 9 (10%): 256px, fixres mode (optional)
 PROG_RESIZING_FIXRES_SCHEDULE = create_progressive_resize_schedule(
     total_epochs=EPOCHS,
     target_size=224,          # Standard ImageNet resolution
-    initial_scale=0.64,       # Start at 64% (144px) - IMPROVED from 0.5
-    delay_fraction=0.3,       # First 30% at initial scale - IMPROVED from 0.5
-    finetune_fraction=0.3,    # Last 30% at full size - IMPROVED from 0.2
+    initial_scale=0.64,       # Start at 144px (64% of 224px)
+    delay_fraction=0.3,       # 30% at initial scale
+    finetune_fraction=0.3,    # 30% at full resolution
     size_increment=4,         # Round to multiples of 4
-    use_fixres=True,         # Disable FixRes for local dev (faster)
-    fixres_size=256           # Higher resolution for FixRes phase
+    use_fixres=True,          # Enable FixRes (can disable for faster local dev)
+    fixres_size=256,          # Higher resolution for FixRes
+    fixres_epochs=1           # Just 1 epoch for local testing
 )
 
 # Early stopping for faster iteration during development
