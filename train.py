@@ -53,9 +53,9 @@ def train_with_lightning(
     print("=" * 60)
     print(config)
 
-    # Determine initial resolution from schedule or use default
+    # Determine initial resolution and transform mode from schedule or use defaults
     initial_resolution = 224
-    use_train_augs = True
+    transform_mode = "train"  # Default to training augmentations
     
     if config.prog_resizing_fixres_schedule:
         # Get the config for epoch 0 (or first epoch in schedule)
@@ -63,6 +63,8 @@ def train_with_lightning(
         schedule_config = config.prog_resizing_fixres_schedule[first_epoch]
         initial_resolution = schedule_config[0]
         use_train_augs = schedule_config[1]
+        # Convert boolean to transform mode string
+        transform_mode = "train" if use_train_augs else "fixres"
     
     # 1. Create DataModule
     # DataModule handles all data operations
@@ -75,7 +77,7 @@ def train_with_lightning(
         batch_size=config.batch_size,
         num_workers=config.num_workers,
         initial_resolution=initial_resolution,
-        use_train_augs=use_train_augs
+        transform_mode=transform_mode
     )
 
     # Calculate total_steps for OneCycleLR scheduler
