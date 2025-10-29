@@ -121,22 +121,14 @@ ONECYCLE_KWARGS = {
     'lr_strategy': 'manual',  # 'conservative', 'manual'
     'pct_start': 0.3,
     'anneal_strategy': 'cos',
-    'div_factor': 50.0,
+    'div_factor': 25.0,
     'final_div_factor': 1000.0
 }
 
 # MixUp/CutMix settings (timm implementation)
 # Using balanced augmentation: ColorJitter + RandomErasing + MixUp(0.2)
 # This combo is proven for 75%+ targets in 90 epochs
-MIXUP_KWARGS = {
-    'mixup_alpha': 0.2,      # MixUp alpha - moderate strength (well-tested combo)
-    'cutmix_alpha': 0.0,     # CutMix alpha (0.0 = disabled)
-    'cutmix_minmax': None,   # CutMix min/max ratio
-    'prob': 1.0,             # Probability of applying mixup/cutmix
-    'switch_prob': 0.5,      # Probability of switching to cutmix when both enabled
-    'mode': 'batch',         # How to apply mixup/cutmix ('batch', 'pair', 'elem')
-    'label_smoothing': 0.1,  # Label smoothing (matches training_step)
-}
+MIXUP_KWARGS = None
 
 # Note: Excellent balance of cost and performance
 # Expected training time: ~3-4 hours for 60 epochs
