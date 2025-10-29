@@ -44,7 +44,7 @@ STD = (0.229, 0.224, 0.225)
 EXPERIMENT_NAME = "imagenet_g5d_training"
 
 # Training settings
-EPOCHS = 90  # Extended for better convergence on ImageNet-1K
+EPOCHS = 120  # Extended for better convergence on ImageNet-1K
 BATCH_SIZE = 128  # Good starting point for A10G with 24GB
 ACCUMULATE_GRAD_BATCHES = 2
 LEARNING_RATE = 0.15  # Reduced for better stability on ImageNet-1K (was 0.2)
@@ -96,7 +96,7 @@ PROG_RESIZING_FIXRES_SCHEDULE = create_progressive_resize_schedule(
     size_increment=4,         # Round to multiples of 4
     use_fixres=True,          # Enable FixRes for +1-2% accuracy boost
     fixres_size=256,          # Higher resolution for FixRes phase (256px)
-    fixres_epochs=9           # Last 9 epochs (10% of 90) for FixRes fine-tuning
+    fixres_epochs=20           # Last 9 epochs (10% of 90) for FixRes fine-tuning
 )
 
 # Early stopping - more patience for full training
