@@ -25,10 +25,11 @@ def create_progressive_resize_schedule(
     finetune_fraction: float = 0.2,
     size_increment: int = 4,
     use_fixres: bool = False,
-    fixres_size: int = 256
+    fixres_size: int = 256,
+    fixres_epochs: int = None
 ):
     """
-    Create a progressive resizing schedule following MosaicML Composer's approach.
+    Create a progressive resizing schedule following MosaicML Composer's approach with FixRes.
     
     Args:
         total_epochs: Total number of training epochs
@@ -38,16 +39,18 @@ def create_progressive_resize_schedule(
         finetune_fraction: Fraction of training at full size (e.g., 0.2 = last 20%)
         size_increment: Round sizes to nearest multiple (e.g., 4 for alignment)
         use_fixres: Whether to add a FixRes phase at the end
-        fixres_size: Resolution for FixRes phase (typically > target_size)
+        fixres_size: Resolution for FixRes phase (typically > target_size, e.g., 256 or 288)
+        fixres_epochs: Number of epochs for FixRes (default: 10% of total_epochs, min 5)
     
     Returns:
-        Dictionary mapping epoch to (resolution, use_train_augs)
+        Dictionary mapping epoch to (resolution, transform_mode)
+        transform_mode: "train", "valid", or "fixres"
     
-    Example:
-        For 60 epochs, target_size=224, initial_scale=0.5, delay_fraction=0.5, finetune_fraction=0.2:
-        - Epochs 0-29 (50%): 112px (initial scale)
-        - Epochs 30-47 (30%): Progressive 112px → 224px
-        - Epochs 48-59 (20%): 224px (fine-tune)
+    Example (90 epochs with FixRes):
+        - Epochs 0-26 (30%): 144px, train mode
+        - Epochs 27-62 (40%): 144px → 224px, train mode
+        - Epochs 63-80 (20%): 224px, train mode (fine-tune)
+        - Epochs 81-89 (10%): 256px, fixres mode (FixRes fine-tuning)
     """
     # Calculate epoch boundaries
     delay_epochs = int(total_epochs * delay_fraction)
@@ -64,7 +67,7 @@ def create_progressive_resize_schedule(
     
     # Phase 1: Delay phase - stay at initial scale
     if delay_epochs > 0:
-        schedule[0] = (initial_size, True)
+        schedule[0] = (initial_size, "train")
     
     # Phase 2: Progressive phase - linearly increase resolution
     if progressive_epochs > 0:
@@ -79,16 +82,20 @@ def create_progressive_resize_schedule(
             
             # Only add to schedule if size changes
             if epoch == delay_epochs or current_size != schedule[list(schedule.keys())[-1]][0]:
-                schedule[epoch] = (current_size, True)
+                schedule[epoch] = (current_size, "train")
     
-    # Phase 3: Fine-tune phase - full resolution
+    # Phase 3: Fine-tune phase - full resolution with standard training augmentations
     if finetune_start_epoch < total_epochs:
-        schedule[finetune_start_epoch] = (target_size, True)
+        schedule[finetune_start_epoch] = (target_size, "train")
     
-    # Optional Phase 4: FixRes phase - even higher resolution with test augmentations
+    # Optional Phase 4: FixRes phase - higher resolution with minimal augmentation
+    # This bridges the train-test distribution gap for improved accuracy
     if use_fixres:
-        fixres_start = total_epochs - max(1, int(total_epochs * 0.1))  # Last 10% for FixRes
-        schedule[fixres_start] = (fixres_size, False)  # False = use test augmentations
+        if fixres_epochs is None:
+            fixres_epochs = max(5, int(total_epochs * 0.1))  # At least 5 epochs, default 10%
+        
+        fixres_start = total_epochs - fixres_epochs
+        schedule[fixres_start] = (fixres_size, "fixres")  # "fixres" = minimal augmentation mode
     
     return schedule
 
@@ -96,12 +103,17 @@ class ResolutionScheduleCallback(Callback):
     """
     Dynamically adjust image resolution and augmentation strategy during training.
     
+    Supports three transform modes:
+    - "train": Full training augmentations (RandomResizedCrop, ColorJitter, etc.)
+    - "valid": Standard validation transforms (Resize + CenterCrop)
+    - "fixres": FixRes fine-tuning (Resize + RandomCrop, minimal augmentation)
+    
     Args:
-        schedule: Dictionary mapping epoch to (resolution, use_train_augs)
+        schedule: Dictionary mapping epoch to (resolution, transform_mode)
                   Example: {
-                      0: (128, True),    # Epoch 0-9: 128px, train augs
-                      10: (224, True),   # Epoch 10-84: 224px, train augs
-                      85: (288, False)   # Epoch 85-90: 288px, test augs (FixRes)
+                      0: (128, "train"),     # Epoch 0-9: 128px, train augs
+                      10: (224, "train"),    # Epoch 10-84: 224px, train augs
+                      85: (288, "fixres")    # Epoch 85-90: 288px, FixRes augs
                   }
     """
     def __init__(self, schedule):
@@ -112,14 +124,15 @@ class ResolutionScheduleCallback(Callback):
 
     def _get_resolution_for_epoch(self, epoch: int):
         """
-        Get the correct resolution for a given epoch.
+        Get the correct resolution and transform mode for a given epoch.
         Handles cases where epoch isn't explicitly in schedule.
         
         Args:
             epoch: Current epoch number
             
         Returns:
-            Tuple of (resolution, use_train_augs) or None if before first schedule entry
+            Tuple of (resolution, transform_mode) or None if before first schedule entry
+            transform_mode: "train", "valid", or "fixres"
         """
         # Find the most recent schedule entry at or before this epoch
         applicable_epochs = [e for e in sorted(self.schedule.keys()) if e <= epoch]
@@ -140,20 +153,26 @@ class ResolutionScheduleCallback(Callback):
             correct_config = self._get_resolution_for_epoch(current_epoch)
             
             if correct_config is not None:
-                size, use_train_augs = correct_config
+                size, transform_mode = correct_config
                 
                 if trainer.is_global_zero:
+                    mode_desc = {
+                        "train": "Train (Full augmentation)",
+                        "valid": "Validation (Resize + CenterCrop)",
+                        "fixres": "FixRes (Minimal augmentation)"
+                    }.get(transform_mode, transform_mode)
+                    
                     msg = f"\n{'='*60}\n"
                     msg += f"🔄 CHECKPOINT RESUME - Restoring Resolution State\n"
                     msg += f"   Resumed at epoch: {current_epoch}\n"
                     msg += f"   Expected resolution: {size}x{size}px\n"
-                    msg += f"   Augmentation: {'Train' if use_train_augs else 'Test (FixRes)'}\n"
+                    msg += f"   Transform mode: {mode_desc}\n"
                     msg += f"{'='*60}"
                     print(msg)
                 
                 # Force update to correct resolution
                 if hasattr(trainer, 'datamodule') and trainer.datamodule is not None:
-                    trainer.datamodule.update_resolution(size, use_train_augs)
+                    trainer.datamodule.update_resolution(size, transform_mode)
                     
                     if trainer.is_global_zero:
                         self._verify_dataloader_changes(trainer, size)
@@ -166,20 +185,29 @@ class ResolutionScheduleCallback(Callback):
         # Check if we need to apply a schedule change
         if current_epoch in self.schedule:
             config = self.schedule[current_epoch]
-            size, use_train_augs = config
+            size, transform_mode = config
 
             # Log the change (only on rank 0 to avoid console spam in DDP)
             if trainer.is_global_zero:
+                mode_descriptions = {
+                    "train": "Train (RandomResizedCrop + ColorJitter + RandomErasing)",
+                    "valid": "Validation (Resize + CenterCrop)",
+                    "fixres": "FixRes (Resize + RandomCrop + Flip only - bridges train/test gap)"
+                }
+                mode_desc = mode_descriptions.get(transform_mode, transform_mode)
+                
                 msg = f"\n{'='*60}\n"
                 msg += f"📐 Resolution Schedule - Epoch {current_epoch}\n"
                 msg += f"   Resolution: {size}x{size}px\n"
-                msg += f"   Augmentation: {'Train (RandomResizedCrop + Flip + TrivialAugmentWide + RandomErasing)' if use_train_augs else 'Test (Resize + CenterCrop) - FixRes'}\n"
+                msg += f"   Transform mode: {mode_desc}\n"
+                if transform_mode == "fixres":
+                    msg += f"   ⚡ FixRes Phase: Fine-tuning at higher resolution!\n"
                 msg += f"{'='*60}"
                 print(msg)
 
             # Update the datamodule's parameters
             if hasattr(trainer, 'datamodule') and trainer.datamodule is not None:
-                trainer.datamodule.update_resolution(size, use_train_augs)
+                trainer.datamodule.update_resolution(size, transform_mode)
 
                 # ✅ Verify the changes actually took effect (only on rank 0)
                 if trainer.is_global_zero:
@@ -210,7 +238,7 @@ class ResolutionScheduleCallback(Callback):
                 
                 # Check DataModule settings
                 print(f"   DataModule Resolution: {dm.resolution}")
-                print(f"   DataModule Use Train Augs: {dm.use_train_augs}")
+                print(f"   DataModule Transform Mode: {dm.transform_mode}")
                 
                 # Verify against expected
                 if dm.resolution == expected_resolution:
@@ -316,7 +344,13 @@ class ResolutionScheduleCallback(Callback):
         print("📐 Resolution Schedule Configuration")
         print("="*60)
         for epoch, config in sorted(self.schedule.items()):
-            size, use_train_augs = config
-            aug_type = "Train" if use_train_augs else "Test (FixRes)"
-            print(f"   Epoch {epoch:2d}+: {size}x{size}px, {aug_type} augmentations")
+            size, transform_mode = config
+            mode_display = {
+                "train": "Train",
+                "valid": "Validation", 
+                "fixres": "FixRes"
+            }.get(transform_mode, transform_mode)
+            
+            emoji = "⚡" if transform_mode == "fixres" else "📊"
+            print(f"   {emoji} Epoch {epoch:2d}+: {size}x{size}px, {mode_display} mode")
         print("="*60 + "\n")

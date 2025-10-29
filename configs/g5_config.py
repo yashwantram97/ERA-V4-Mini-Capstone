@@ -60,32 +60,43 @@ NUM_WORKERS = 4  # 4 workers per GPU process (reasonable for DDP)
 # Precision settings
 PRECISION = "16-mixed"  # A10G benefits from mixed precision
 
-# Progressive Resizing Schedule (Improved Approach)
-# Updated from MosaicML's original 112px start to better initial resolution:
-# - initial_scale = 0.64: Start at 64% resolution (144px for target 224px) - BETTER than 112px
-# - delay_fraction = 0.3: Stay at initial scale for first 30% of training (shorter delay)
-# - finetune_fraction = 0.3: Train at full resolution for last 30% (longer fine-tune)
-# - size_increment = 4: Round sizes to multiples of 4 for alignment
+# Progressive Resizing + FixRes Schedule
+# This schedule combines progressive resizing with FixRes fine-tuning for optimal accuracy
 #
-# Why 144px instead of 112px?
-# • 112px loses too much visual detail for ImageNet classification
-# • 144px provides better feature learning from the start
-# • Shorter delay phase allows more time at full resolution
-# • Longer fine-tune phase improves final accuracy
+# Progressive Resizing Benefits:
+# • Faster training at lower resolutions (smaller images = faster computation)
+# • Curriculum learning: model learns coarse features first, then fine details
+# • Better convergence compared to training at full resolution throughout
 #
-# Schedule breakdown for 60 epochs:
-# - Epochs 0-17 (30%): 144px - Better feature learning from start
-# - Epochs 18-41 (40%): 144→224px - Progressive curriculum learning
-# - Epochs 42-59 (30%): 224px - Extended fine-tune at full resolution
+# FixRes (Fixed Resolution) Benefits:
+# • Addresses train-test distribution mismatch
+# • Training uses RandomResizedCrop (random crops), testing uses CenterCrop
+# • Fine-tuning at higher resolution with minimal augmentation bridges this gap
+# • Expected improvement: +1-2% validation accuracy
+#
+# Schedule breakdown for 90 epochs:
+# Phase 1 (Epochs 0-89): 224px with full training augmentations
+#   - Standard training with RandomResizedCrop, ColorJitter, RandomErasing
+#   - Learn features with strong data augmentation
+#
+# Phase 2 (Epochs 81-89, last 10%): 256px with FixRes augmentations
+#   - Higher resolution (256px vs 224px) captures finer details
+#   - Minimal augmentation (Resize + RandomCrop + Flip only)
+#   - Adapts model to test-time distribution
+#   - Bridges the train (RandomResizedCrop) vs test (CenterCrop) gap
+#
+# Note: We removed progressive resizing (144px → 224px) and go straight to 224px
+# because the dataset is already optimized and full resolution training is fast enough
 PROG_RESIZING_FIXRES_SCHEDULE = create_progressive_resize_schedule(
     total_epochs=EPOCHS,
     target_size=224,          # Standard ImageNet resolution
-    initial_scale=0.65,       # Start at 64% (144px) - IMPROVED from 0.5
-    delay_fraction=0.1,       # First 30% at initial scale - IMPROVED from 0.5
-    finetune_fraction=0.4,    # Last 30% at full size - IMPROVED from 0.2
+    initial_scale=1.0,        # Start at full resolution (224px)
+    delay_fraction=0.0,       # No delay, start at target size immediately
+    finetune_fraction=1.0,    # Train at 224px for most of training
     size_increment=4,         # Round to multiples of 4
-    use_fixres=True,         # Enable FixRes for +1-2% accuracy boost
-    fixres_size=256           # Higher resolution for FixRes phase
+    use_fixres=True,          # Enable FixRes for +1-2% accuracy boost
+    fixres_size=256,          # Higher resolution for FixRes phase (256px)
+    fixres_epochs=9           # Last 9 epochs (10% of 90) for FixRes fine-tuning
 )
 
 # Early stopping - more patience for full training
@@ -128,7 +139,16 @@ ONECYCLE_KWARGS = {
 # MixUp/CutMix settings (timm implementation)
 # Using balanced augmentation: ColorJitter + RandomErasing + MixUp(0.2)
 # This combo is proven for 75%+ targets in 90 epochs
-MIXUP_KWARGS = None
+MIXUP_KWARGS = {
+    'mixup_alpha': 0.2,
+    'cutmix_alpha': 0.0,
+    'cutmix_minmax': None,
+    'prob': 1.0,
+    'switch_prob': 0.5,
+    'mode': 'batch',
+    'label_smoothing': 0.1,
+    'num_classes': 1000
+}
 
 # Note: Excellent balance of cost and performance
 # Expected training time: ~3-4 hours for 60 epochs

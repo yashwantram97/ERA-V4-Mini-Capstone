@@ -4,10 +4,26 @@ from config import PROJECT_ROOT
 
 def get_transforms(transform_type="train", mean=None, std=None, resolution=224):
     """
-    Get transforms for training or validation using torchvision
+    Get transforms for training, validation, or FixRes fine-tuning.
+    
+    Transform Types:
+    - "train": Full training augmentations with RandomResizedCrop
+    - "valid": Standard validation transforms with Resize + CenterCrop
+    - "fixres": FixRes fine-tuning with minimal augmentation at higher resolution
+    
+    FixRes (Fixed Resolution) Explained:
+    The FixRes technique addresses train-test distribution mismatch:
+    1. Training uses RandomResizedCrop which samples random crop locations/scales
+    2. Testing uses CenterCrop which always crops from center
+    3. This mismatch hurts accuracy by ~1-2%
+    
+    Solution: Fine-tune at higher resolution with minimal augmentation
+    - Trains the model to handle the different crop distribution
+    - Uses higher resolution (e.g., 256 or 288 vs 224) for better features
+    - Minimal augmentation (only horizontal flip) to adapt to test distribution
     
     Args:
-        transform_type: "train" or "valid"
+        transform_type: "train", "valid", or "fixres"
         mean: Normalization mean (list or tuple)
         std: Normalization std (list or tuple)
         resolution: Target image resolution (default 224)
@@ -21,14 +37,20 @@ def get_transforms(transform_type="train", mean=None, std=None, resolution=224):
         transforms = T.Compose([
             T.RandomResizedCrop(resolution, scale=(0.08, 1.0)),
             T.RandomHorizontalFlip(),
-            # T.TrivialAugmentWide(),
-            T.ColorJitter(brightness=0.4, contrast=0.4, saturation=0.4, hue=0.1),
+            T.ColorJitter(brightness=0.3, contrast=0.3, saturation=0.3, hue=0.1),
             T.ToTensor(),
             T.Normalize(mean=mean, std=std),
-            T.RandomErasing(p=0.25, scale=(0.02, 0.33), ratio=(0.3, 3.3), value='random'),
+            T.RandomErasing(p=0.25, scale=(0.02, 0.33), ratio=(0.3, 3.3), value=0),
         ])
-    else:
-        # Validation/Test transforms - FixRes compatible
+    elif transform_type == "fixres":
+        transforms = T.Compose([
+            T.Resize(int(resolution * 256 / 224)),  # Scale proportionally
+            T.RandomCrop(resolution),  # Random crop (not center) to maintain some variation
+            T.RandomHorizontalFlip(),
+            T.ToTensor(),
+            T.Normalize(mean=mean, std=std),
+        ])
+    else:  # "valid" or default
         transforms = T.Compose([
             T.Resize(int(resolution * 256 / 224)),  # Scale proportionally (256 for 224px)
             T.CenterCrop(resolution),

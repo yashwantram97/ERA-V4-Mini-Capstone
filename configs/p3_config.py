@@ -60,32 +60,46 @@ S3_DIR="s3://imagenet-resnet-50-erav4/data/"
 # Precision settings
 PRECISION = "16-mixed"  # V100 has excellent Tensor Core support
 
-# Progressive Resizing Schedule (Improved Approach)
-# Updated from MosaicML's original 112px start to better initial resolution:
-# - initial_scale = 0.64: Start at 64% resolution (144px for target 224px) - BETTER than 112px
-# - delay_fraction = 0.3: Stay at initial scale for first 30% of training (shorter delay)
-# - finetune_fraction = 0.3: Train at full resolution for last 30% (longer fine-tune)
-# - size_increment = 4: Round sizes to multiples of 4 for alignment
+# Progressive Resizing + FixRes Schedule
+# Combines progressive resizing with FixRes for optimal training efficiency and accuracy
 #
-# Why 144px instead of 112px?
-# • 112px loses too much visual detail for ImageNet classification
-# • 144px provides better feature learning from the start
-# • Shorter delay phase allows more time at full resolution
-# • Longer fine-tune phase improves final accuracy
+# Progressive Resizing Benefits:
+# • Faster training at lower resolutions (smaller images = faster computation)
+# • Curriculum learning: coarse features first, then fine details
+# • ~30% training speedup in early epochs
+#
+# FixRes Benefits:
+# • Addresses train-test distribution mismatch
+# • Fine-tunes at higher resolution with minimal augmentation
+# • Expected: +1-2% validation accuracy
 #
 # Schedule breakdown for 60 epochs:
-# - Epochs 0-17 (30%): 144px - Better feature learning from start
-# - Epochs 18-41 (40%): 144→224px - Progressive curriculum learning
-# - Epochs 42-59 (30%): 224px - Extended fine-tune at full resolution
+# Phase 1 (Epochs 0-17, 30%): 144px, train mode
+#   - Fast training at 64% resolution
+#   - Strong augmentation for robustness
+#
+# Phase 2 (Epochs 18-41, 40%): 144→224px, train mode
+#   - Progressive increase to full resolution
+#   - Smooth curriculum learning transition
+#
+# Phase 3 (Epochs 42-53, 20%): 224px, train mode
+#   - Standard training at full resolution
+#   - Convergence to optimal weights
+#
+# Phase 4 (Epochs 54-59, 10%): 256px, fixres mode
+#   - Higher resolution (256px) for finer details
+#   - Minimal augmentation bridges train-test gap
+#   - Final accuracy boost
 PROG_RESIZING_FIXRES_SCHEDULE = create_progressive_resize_schedule(
     total_epochs=EPOCHS,
     target_size=224,          # Standard ImageNet resolution
-    initial_scale=0.64,       # Start at 64% (144px) - IMPROVED from 0.5
-    delay_fraction=0.3,       # First 30% at initial scale - IMPROVED from 0.5
-    finetune_fraction=0.3,    # Last 30% at full size - IMPROVED from 0.2
+    initial_scale=0.64,       # Start at 144px (64% of 224px)
+    delay_fraction=0.3,       # 30% at initial scale
+    finetune_fraction=0.3,    # 30% at full resolution
     size_increment=4,         # Round to multiples of 4
-    use_fixres=True,         # Enable FixRes for +1-2% accuracy boost
-    fixres_size=256           # Higher resolution for FixRes phase
+    use_fixres=True,          # Enable FixRes for +1-2% accuracy boost
+    fixres_size=256,          # Higher resolution for FixRes
+    fixres_epochs=6           # Last 6 epochs (10% of 60) for FixRes
 )
 
 # Early stopping - more patience for full training

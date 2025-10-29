@@ -24,7 +24,7 @@ class ImageNetDataModule(L.LightningDataModule):
         num_workers: int = 4,
         pin_memory: bool = True,
         initial_resolution: int = 224,  # Starting resolution
-        use_train_augs: bool = True,    # Whether to use train augmentations
+        transform_mode: str = "train",  # Transform mode: "train", "valid", or "fixres"
         prefetch_factor: int = 2,       # Number of batches to prefetch
     ):
         """
@@ -39,7 +39,7 @@ class ImageNetDataModule(L.LightningDataModule):
             num_workers: Number of workers for data loading (per GPU in DDP mode)
             pin_memory: Whether to pin memory for faster GPU transfer
             initial_resolution: Starting image resolution (default 224)
-            use_train_augs: Whether to use training augmentations (default True)
+            transform_mode: Transform mode - "train", "valid", or "fixres" (default "train")
             prefetch_factor: Number of batches to prefetch per worker (default 2)
         """
         super().__init__()
@@ -58,26 +58,26 @@ class ImageNetDataModule(L.LightningDataModule):
         self.pin_memory = pin_memory
         self.prefetch_factor = prefetch_factor
 
-        # Store resolution and augmentation settings
+        # Store resolution and transform mode
         self.resolution = initial_resolution
-        self.use_train_augs = use_train_augs
+        self.transform_mode = transform_mode
         
         # Will be set in setup()
         self.train_dataset = None
         self.val_dataset = None
 
-    def update_resolution(self, resolution: int, use_train_augs: bool):
+    def update_resolution(self, resolution: int, transform_mode: str):
         """
-        Update resolution and augmentation type.
+        Update resolution and transform mode.
         Called by ResolutionScheduleCallback during training.
         Note: This must run on all ranks to update datasets on each GPU.
         
         Args:
-            resolution: New image resolution (e.g., 128, 224, 288)
-            use_train_augs: True for train augmentations, False for test augmentations (FixRes)
+            resolution: New image resolution (e.g., 128, 224, 256, 288)
+            transform_mode: Transform mode - "train", "valid", or "fixres"
         """
         self.resolution = resolution
-        self.use_train_augs = use_train_augs
+        self.transform_mode = transform_mode
         
         # Recreate datasets with new transforms (must happen on all ranks)
         self.setup(stage='fit')
@@ -101,14 +101,16 @@ class ImageNetDataModule(L.LightningDataModule):
             stage: 'fit', 'validate', 'test', or 'predict'
         """
         if stage == 'fit' or stage is None:
-            # Generate transforms dynamically based on current settings
+            # Generate transforms dynamically based on current transform mode
+            # Training dataset uses the current transform mode (train/fixres)
             train_transforms = get_transforms(
-                transform_type="train" if self.use_train_augs else "valid",
+                transform_type=self.transform_mode,
                 mean=self.mean,
                 std=self.std,
                 resolution=self.resolution
             )
             
+            # Validation dataset always uses "valid" mode (Resize + CenterCrop)
             valid_transforms = get_transforms(
                 transform_type="valid",
                 mean=self.mean,
@@ -136,10 +138,15 @@ class ImageNetDataModule(L.LightningDataModule):
                 should_print = self.trainer.is_global_zero
             
             if should_print:
-                aug_type = "Train" if self.use_train_augs else "Test (FixRes)"
+                mode_display = {
+                    "train": "Train",
+                    "valid": "Validation",
+                    "fixres": "FixRes"
+                }.get(self.transform_mode, self.transform_mode)
+                
                 print(f"📊 Dataset @ {self.resolution}x{self.resolution}px:")
-                print(f"   Train: {len(self.train_dataset)} samples ({aug_type} augmentation)")
-                print(f"   Val:   {len(self.val_dataset)} samples (Test augmentation)")
+                print(f"   Train: {len(self.train_dataset)} samples ({mode_display} augmentation)")
+                print(f"   Val:   {len(self.val_dataset)} samples (Validation augmentation)")
 
     def train_dataloader(self):
         """Return training dataloader"""
