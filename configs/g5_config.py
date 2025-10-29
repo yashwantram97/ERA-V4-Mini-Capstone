@@ -140,14 +140,14 @@ ONECYCLE_KWARGS = {
 # Using balanced augmentation: ColorJitter + RandomErasing + MixUp(0.2)
 # This combo is proven for 75%+ targets in 90 epochs
 MIXUP_KWARGS = {
-    'mixup_alpha': 0.2,
-    'cutmix_alpha': 0.0,
+    'mixup_alpha': 0.2,      # MixUp strength (0.2 is standard)
+    'cutmix_alpha': 0.0,     # CutMix disabled
     'cutmix_minmax': None,
-    'prob': 1.0,
-    'switch_prob': 0.5,
+    'prob': 0.5,             # Apply MixUp to 50% of batches (balanced with other augs)
+    'switch_prob': 0.5,      # Not used since CutMix is disabled
     'mode': 'batch',
-    'label_smoothing': 0.1,
-    'num_classes': 1000
+    'label_smoothing': 0.1,  # Label smoothing
+    'num_classes': 1000       # ImageNet-1k has 1000 classes
 }
 
 # Note: Excellent balance of cost and performance
