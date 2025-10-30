@@ -47,7 +47,7 @@ EXPERIMENT_NAME = "imagenet_g5d_training"
 EPOCHS = 120  # Extended for better convergence on ImageNet-1K
 BATCH_SIZE = 128  # Good starting point for A10G with 24GB
 ACCUMULATE_GRAD_BATCHES = 2
-LEARNING_RATE = 0.15  # Reduced for better stability on ImageNet-1K (was 0.2)
+LEARNING_RATE = 0.4  # Reduced for better stability on ImageNet-1K (was 0.2)
 WEIGHT_DECAY =  5e-4
 SCHEDULER_TYPE = 'one_cycle_policy'
 S3_DIR = "s3://imagenet-resnet-50-erav4/data/"
@@ -116,7 +116,7 @@ CHECK_VAL_EVERY_N_EPOCH = 1
 GRADIENT_CLIP_VAL = 1.0
 
 # Multi-GPU settings
-NUM_DEVICES = 4  # Use all 4 A10G GPUs
+NUM_DEVICES = 8  # Use all 4 A10G GPUs
 STRATEGY = "ddp"  # Distributed Data Parallel
 
 # LR Finder settings
