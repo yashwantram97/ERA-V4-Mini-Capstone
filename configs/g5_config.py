@@ -55,7 +55,7 @@ S3_DIR = "s3://imagenet-resnet-50-erav4/data/"
 # DataLoader settings - plenty of CPU cores available
 # In DDP mode, each GPU spawns its own workers
 # So 4 workers per GPU process × 4 GPUs = 16 total workers
-NUM_WORKERS = 4  # 4 workers per GPU process (reasonable for DDP)
+NUM_WORKERS = 8  # 4 workers per GPU process (reasonable for DDP)
 
 # Precision settings
 PRECISION = "16-mixed"  # A10G benefits from mixed precision
@@ -116,7 +116,7 @@ CHECK_VAL_EVERY_N_EPOCH = 1
 GRADIENT_CLIP_VAL = 1.0
 
 # Multi-GPU settings
-NUM_DEVICES = 8  # Use all 4 A10G GPUs
+NUM_DEVICES = 4  # Use all 4 A10G GPUs
 STRATEGY = "ddp"  # Distributed Data Parallel
 
 # LR Finder settings
