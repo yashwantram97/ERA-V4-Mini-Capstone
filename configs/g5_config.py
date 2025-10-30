@@ -132,7 +132,7 @@ ONECYCLE_KWARGS = {
     'lr_strategy': 'manual',  # 'conservative', 'manual'
     'pct_start': 0.3,
     'anneal_strategy': 'cos',
-    'div_factor': 50.0,
+    'div_factor': 25.0,
     'final_div_factor': 1000.0
 }
 
