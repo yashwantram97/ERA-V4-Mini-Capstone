@@ -44,10 +44,10 @@ STD = (0.229, 0.224, 0.225)
 EXPERIMENT_NAME = "imagenet_g5d_training"
 
 # Training settings
-EPOCHS = 120  # Extended for better convergence on ImageNet-1K
+EPOCHS = 90  # Extended for better convergence on ImageNet-1K
 BATCH_SIZE = 128  # Good starting point for A10G with 24GB
 ACCUMULATE_GRAD_BATCHES = 2
-LEARNING_RATE = 0.4  # Reduced for better stability on ImageNet-1K (was 0.2)
+LEARNING_RATE = 0.2  # Reduced for better stability on ImageNet-1K (was 0.2)
 WEIGHT_DECAY =  5e-4
 SCHEDULER_TYPE = 'one_cycle_policy'
 S3_DIR = "s3://imagenet-resnet-50-erav4/data/"
@@ -139,16 +139,7 @@ ONECYCLE_KWARGS = {
 # MixUp/CutMix settings (timm implementation)
 # Using balanced augmentation: ColorJitter + RandomErasing + MixUp(0.2)
 # This combo is proven for 75%+ targets in 90 epochs
-MIXUP_KWARGS = {
-    'mixup_alpha': 0.2,      # MixUp strength (0.2 is standard)
-    'cutmix_alpha': 0.0,     # CutMix disabled
-    'cutmix_minmax': None,
-    'prob': 0.5,             # Apply MixUp to 50% of batches (balanced with other augs)
-    'switch_prob': 0.5,      # Not used since CutMix is disabled
-    'mode': 'batch',
-    'label_smoothing': 0.1,  # Label smoothing
-    'num_classes': 1000       # ImageNet-1k has 1000 classes
-}
+MIXUP_KWARGS = None
 
 # Note: Excellent balance of cost and performance
 # Expected training time: ~3-4 hours for 60 epochs
