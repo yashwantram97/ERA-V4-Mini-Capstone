@@ -47,7 +47,7 @@ EXPERIMENT_NAME = "imagenet_g5d_training"
 EPOCHS = 90  # Extended for better convergence on ImageNet-1K
 BATCH_SIZE = 128  # Good starting point for A10G with 24GB
 ACCUMULATE_GRAD_BATCHES = 2
-LEARNING_RATE = 0.4  # Reduced for better stability on ImageNet-1K (was 0.2)
+LEARNING_RATE = 0.25  # Reduced for better stability on ImageNet-1K (was 0.2)
 WEIGHT_DECAY =  5e-4
 SCHEDULER_TYPE = 'one_cycle_policy'
 S3_DIR = "s3://imagenet-resnet-50-erav4/data/"
@@ -96,7 +96,7 @@ PROG_RESIZING_FIXRES_SCHEDULE = create_progressive_resize_schedule(
     size_increment=4,         # Round to multiples of 4
     use_fixres=True,          # Enable FixRes for +1-2% accuracy boost
     fixres_size=256,          # Higher resolution for FixRes phase (256px)
-    fixres_epochs=20           # Last 9 epochs (10% of 90) for FixRes fine-tuning
+    fixres_epochs=10           # Last 9 epochs (10% of 90) for FixRes fine-tuning
 )
 
 # Early stopping - more patience for full training
@@ -132,7 +132,7 @@ ONECYCLE_KWARGS = {
     'lr_strategy': 'manual',  # 'conservative', 'manual'
     'pct_start': 0.3,
     'anneal_strategy': 'cos',
-    'div_factor': 50.0,
+    'div_factor': 25.0,
     'final_div_factor': 1000.0
 }
 
