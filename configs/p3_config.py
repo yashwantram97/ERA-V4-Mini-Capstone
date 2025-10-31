@@ -46,11 +46,11 @@ STD = (0.229, 0.224, 0.225)
 EXPERIMENT_NAME = "imagenet_p3_training"
 
 # Training settings
-EPOCHS = 120
-BATCH_SIZE = 512  # Per GPU: 256, Total effective: 256 * 8 = 2048
+EPOCHS = 60
+BATCH_SIZE = 1024  # Per GPU: 256, Total effective: 256 * 8 = 2048
 LEARNING_RATE = 1.6  # Found with LR finder
 WEIGHT_DECAY = 1e-4
-SCHEDULER_TYPE = 'cosine_annealing_with_linear_warmup'
+SCHEDULER_TYPE = 'one_cycle_policy'
 ACCUMULATE_GRAD_BATCHES = 1
 # DataLoader settings - maximize data throughput
 NUM_WORKERS = 24  # 2 workers per GPU (8 GPUs) = 16 total
@@ -93,13 +93,13 @@ PRECISION = "16-mixed"  # V100 has excellent Tensor Core support
 PROG_RESIZING_FIXRES_SCHEDULE = create_progressive_resize_schedule(
     total_epochs=EPOCHS,
     target_size=224,          # Standard ImageNet resolution
-    initial_scale=0.64,       # Start at 144px (64% of 224px)
-    delay_fraction=0.3,       # 30% at initial scale
-    finetune_fraction=0.3,    # 30% at full resolution
+    initial_scale=1.0,       # Start at 144px (64% of 224px)
+    delay_fraction=0.0,       # 30% at initial scale
+    finetune_fraction=1.0,    # 30% at full resolution
     size_increment=4,         # Round to multiples of 4
     use_fixres=True,          # Enable FixRes for +1-2% accuracy boost
-    fixres_size=256,          # Higher resolution for FixRes
-    fixres_epochs=6           # Last 6 epochs (10% of 60) for FixRes
+    fixres_size=256,          # Higher resolution for FixRes phase (256px)
+    fixres_epochs=10           # Last 9 epochs (10% of 90) for FixRes fine-tuning
 )
 
 # Early stopping - more patience for full training
@@ -140,15 +140,16 @@ ONECYCLE_KWARGS = {
 }
 
 # MixUp/CutMix settings (timm implementation)
-MIXUP_KWARGS = {
-    'mixup_alpha': 0.2,      # MixUp alpha (0.0 = disabled, 0.2-1.0 recommended)
-    'cutmix_alpha': 0.0,     # CutMix alpha (0.0 = disabled)
-    'cutmix_minmax': None,   # CutMix min/max ratio
-    'prob': 1.0,             # Probability of applying mixup/cutmix
-    'switch_prob': 0.5,      # Probability of switching to cutmix when both enabled
-    'mode': 'batch',         # How to apply mixup/cutmix ('batch', 'pair', 'elem')
-    'label_smoothing': 0.1,  # Label smoothing (matches training_step)
-}
+# MIXUP_KWARGS = {
+#     'mixup_alpha': 0.2,      # MixUp alpha (0.0 = disabled, 0.2-1.0 recommended)
+#     'cutmix_alpha': 0.0,     # CutMix alpha (0.0 = disabled)
+#     'cutmix_minmax': None,   # CutMix min/max ratio
+#     'prob': 1.0,             # Probability of applying mixup/cutmix
+#     'switch_prob': 0.5,      # Probability of switching to cutmix when both enabled
+#     'mode': 'batch',         # How to apply mixup/cutmix ('batch', 'pair', 'elem')
+#     'label_smoothing': 0.1,  # Label smoothing (matches training_step)
+# }
+MIXUP_KWARGS = None
 
 # Additional optimizations for p3.16xlarge
 # Set these in your training script:
