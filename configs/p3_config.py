@@ -48,12 +48,12 @@ EXPERIMENT_NAME = "imagenet_p3_training"
 # Training settings
 EPOCHS = 60
 BATCH_SIZE = 1024  # Per GPU: 256, Total effective: 256 * 8 = 2048
-LEARNING_RATE = 1.6  # Found with LR finder
+LEARNING_RATE = 1.024  # Found with LR finder
 WEIGHT_DECAY = 1e-4
 SCHEDULER_TYPE = 'one_cycle_policy'
 ACCUMULATE_GRAD_BATCHES = 1
 # DataLoader settings - maximize data throughput
-NUM_WORKERS = 24  # 2 workers per GPU (8 GPUs) = 16 total
+NUM_WORKERS = 10
 # V100 is compute-bound, not data-bound, so 2 workers per GPU is sufficient
 S3_DIR="s3://imagenet-resnet-50-erav4/data/"
 
