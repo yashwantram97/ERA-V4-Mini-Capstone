@@ -37,10 +37,10 @@ def get_transforms(transform_type="train", mean=None, std=None, resolution=224):
         transforms = T.Compose([
             T.RandomResizedCrop(resolution, scale=(0.08, 1.0)),
             T.RandomHorizontalFlip(),
-            T.ColorJitter(brightness=0.3, contrast=0.3, saturation=0.3, hue=0.1),
+            # T.ColorJitter(brightness=0.3, contrast=0.3, saturation=0.3, hue=0.1),
             T.ToTensor(),
             T.Normalize(mean=mean, std=std),
-            T.RandomErasing(p=0.25, scale=(0.02, 0.33), ratio=(0.3, 3.3), value=0),
+            # T.RandomErasing(p=0.25, scale=(0.02, 0.33), ratio=(0.3, 3.3), value=0),
         ])
     elif transform_type == "fixres":
         transforms = T.Compose([
