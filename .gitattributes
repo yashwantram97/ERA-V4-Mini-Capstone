@@ -1,0 +1,1 @@
+accuracy=0.774.ckpt filter=lfs diff=lfs merge=lfs -text

@@ -1,10 +1,12 @@
 # ImageNet Training Pipeline - Medium Recipe 🌶️🌶️
 
-A highly optimized PyTorch Lightning-based ImageNet training pipeline that achieves **78-79.5% accuracy** with advanced training techniques and efficient resource utilization.
+A highly optimized PyTorch Lightning-based ImageNet training pipeline that achieves **77.45% top-1 accuracy** on ImageNet-1K with advanced training techniques and efficient resource utilization, exceeding the 75% target.
 
 ## 🎯 Overview
 
 This project implements state-of-the-art training techniques for ImageNet classification using ResNet-50, combining multiple optimization methods to achieve competitive accuracy while minimizing training time and cost.
+
+**🎉 Training Results: Achieved 77.45% top-1 accuracy on ImageNet-1K, exceeding the 75% target by 2.45%!**
 
 ## 📊 Datasets
 
@@ -21,7 +23,8 @@ This project supports two dataset variants:
 - **Dataset:** [ImageNet Object Localization Challenge](https://www.kaggle.com/competitions/imagenet-object-localization-challenge/data)
 - **Size:** 1.2M training images, 50K validation images (1000 classes)
 - **Use Case:** Production training on cloud infrastructure
-- **Training Time:** 10-11 hours on AWS p3.16xlarge (8x V100 GPUs)
+- **Final Accuracy:** 77.45% top-1 (Target: 75% ✅)
+- **Training Time:** 356 minutes (~6 hours)
 - **Download:** Available through Kaggle competition
 
 ## ✨ Key Features
@@ -39,25 +42,37 @@ This project supports two dataset variants:
 
 ## 📈 Performance Metrics
 
+### Final Training Results ✅
+
 | Metric | Value |
 |--------|-------|
-| **Final Accuracy** | 78.1% - 79.5% |
-| **Training Time (p3.16xlarge)** | 10-11 hours |
-| **Training Time (M4 Pro - Mini)** | 2-3 hours |
+| **Best Validation Accuracy** | **77.45%** (top-1) |
+| **Target Accuracy** | 75% ✅ **EXCEEDED by 2.45%** |
+| **Training Time (p3.16xlarge)** | 356 minutes (~6 hours) |
+| **Total Epochs** | 90 |
+| **Best Model Checkpoint** | Epoch 89 |
 | **Model** | ResNet-50 with BlurPool |
-| **Parameters** | ~25M |
-| **Training Cost (AWS)** | ~$50-70 per run |
+| **Parameters** | 25,576,264 (~25M) |
+| **Training Cost (AWS p3.16xlarge)** | ~$15-25 per run |
 
-### Training Timeline
+### Training Timeline (Actual Results)
 
-| Epoch | Resolution | Expected Val Accuracy | Phase |
-|-------|-----------|---------------------|-------|
-| 0-5   | 128px     | 35% → 68%          | Rapid learning |
-| 6-10  | 128px     | 68% → 72%          | Low-res convergence |
-| 10-20 | 224px     | 70% → 74%          | Resolution jump recovery |
-| 40-60 | 224px     | 75% → 77%          | Steady improvement |
-| 70-85 | 224px     | 77% → 78%          | Near convergence |
-| 85-90 | 288px     | 78% → 79%+         | FixRes boost |
+| Epoch Range | Resolution | Val Accuracy Progression | Phase |
+|-------------|-----------|------------------------|-------|
+| 1-10   | 128px     | 4.10% → 21.46%          | Initial learning |
+| 11-30  | 224px     | 26.00% → 56.04%         | Rapid improvement |
+| 31-60  | 224px     | 54.17% → 64.12%         | Steady convergence |
+| 61-80  | 224px     | 72.80% → 74.04%         | Near target |
+| 81-90  | 288px     | 75.07% → **77.45%**     | FixRes fine-tuning ⭐ |
+
+**Key Milestones:**
+- 🎯 **Epoch 81:** Achieved **75.07%** - Target reached!
+- ⭐ **Epoch 82:** **76.15%** - Continued improvement
+- 🏆 **Epochs 89-90:** **77.45%** - Final best accuracy
+
+### Detailed Training Logs
+
+📊 **Complete training logs are available in [README-logs.md](README-logs.md)** with epoch-by-epoch metrics from epochs 1-90.
 
 ## ⚙️ Hardware-Specific Configurations
 
@@ -167,9 +182,11 @@ jupyter notebook notebook-p3.16xlarge.ipynb
 
 ```
 .
-├── train.py                    # Main training script with config support
-├── find_lr.py                  # Learning rate finder with config support
-├── config.py                   # Configuration loader (backward compatible)
+├── README.md                    # Main project documentation
+├── README-logs.md               # Complete training logs (epochs 1-90)
+├── train.py                     # Main training script with config support
+├── find_lr.py                   # Learning rate finder with config support
+├── config.py                    # Configuration loader (backward compatible)
 ├── configs/                    # Hardware-specific configurations
 │   ├── README.md              # Detailed configuration documentation
 │   ├── local_config.py        # MacBook M4 Pro settings
@@ -195,6 +212,7 @@ jupyter notebook notebook-p3.16xlarge.ipynb
 
 ## 📚 Documentation
 
+- **[README-logs.md](README-logs.md)** - Complete training logs from epochs 1-90 with detailed metrics
 - **[configs/README.md](configs/README.md)** - Complete guide to hardware configurations
 - **[docs/recipes.md](docs/recipes.md)** - In-depth explanation of all training techniques with papers and code examples
 
