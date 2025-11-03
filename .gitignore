@@ -19,5 +19,13 @@ temp.ipynb
 logs/*
 !logs/.gitkeep
 
+# models
+models/*
+!logs/.gitkeep
+
+# checkpoints
+checkpoints/*
+!logs/.gitkeep
+
 # Verification outputs
 tests/verification_outputs/

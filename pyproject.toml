@@ -22,5 +22,8 @@ dependencies = [
     "timm>=1.0.20",
     "fsspec>=2024.10.0",
     "s3fs>=2024.10.0",
-    "pytest>=8.0.0"
+    "pytest>=8.0.0",
+    "onnx>=1.19.1",
+    "onnxruntime>=1.23.2",
+    "onnxscript>=0.5.6",
 ]
