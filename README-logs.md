@@ -1016,6 +1016,42 @@ Estimated Total Size (MB): 352.14
 
 ---
 
+## TensorBoard Logs
+
+### Viewing TensorBoard Logs
+
+You can visualize the training metrics using TensorBoard with the following commands:
+
+```bash
+# View logs from version-0 (Epochs 1-61)
+tensorboard --logdir=logs/version-0
+
+# View logs from version-1 (Epochs 62-90)
+tensorboard --logdir=logs/version-1
+```
+
+### Training Metrics Visualization
+
+#### Version 0 (Epochs 1-61)
+
+![Version 0 TensorBoard](assets/version-0.png)
+
+**Key Observations:**
+- Initial training phase showing validation accuracy reaching ~63.5% at step 19,031
+- Validation loss decreasing to ~1.67
+
+#### Version 1 (Epochs 62-90)
+
+![Version 1 TensorBoard](assets/version-1.png)
+
+**Key Observations:**
+- Resumed training phase showing continued improvement
+- Final validation accuracy reaching ~77.45% at step 28,079
+- Validation loss further reduced to ~0.97
+- Significant improvement after FixRes fine-tuning (epochs 82-90)
+
+---
+
 ## Performance Analysis
 
 ### Accuracy Progression
