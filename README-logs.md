@@ -104,7 +104,7 @@
 | 89 | 1.2115 | 90.74% | 0.9685 | **77.45%** 🏆 |
 | 90 | 1.2130 | 90.88% | 0.9716 | **77.45%** 🏆 |
 
-**Note:** Epochs 82-90 show a significant improvement, likely due to FixRes fine-tuning at higher resolution (288px). The model achieved the target of 75% accuracy at epoch 81 and continued improving to reach 77.45% at epochs 89-90.
+**Note:** Epochs 82-90 show a significant improvement, likely due to FixRes fine-tuning at higher resolution (256px). The model achieved the target of 75% accuracy at epoch 81 and continued improving to reach 77.45% at epochs 89-90.
 
 ---
 
