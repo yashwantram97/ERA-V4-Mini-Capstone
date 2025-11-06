@@ -120,7 +120,7 @@ python train.py --config g5
 
 ### **P3 Config (8x V100 GPUs)**
 ```bash
-python train.py --config p3
+python train.py --config p4
 ```
 - 8 processes (one per GPU)
 - `sync_dist=True` → aggregates metrics across 8 GPUs
@@ -162,7 +162,7 @@ python train.py --config local
 
 ### 2. Test Multi-GPU (if available)
 ```bash
-python train.py --config g5  # or p3
+python train.py --config g5  # or p4
 ```
 **Expected**: 
 - No duplicate console messages
@@ -216,7 +216,7 @@ Your codebase is now production-ready for both development (single GPU) and prod
 
 **Next steps**:
 1. Test with your local config to ensure everything still works
-2. Deploy to AWS and test with g5 or p3 config
+2. Deploy to AWS and test with g5 or p4 config
 3. Monitor logs and TensorBoard to verify correct behavior
 4. Enjoy faster, more accurate multi-GPU training! 🎉
 

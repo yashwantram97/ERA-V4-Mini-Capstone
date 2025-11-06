@@ -193,7 +193,7 @@ MixUp is integrated into the training pipeline:
 
 MixUp is configured in:
 - `configs/local_config.py`: MIXUP_KWARGS
-- `configs/p3_config.py`: MIXUP_KWARGS
+- `configs/p4_config.py`: MIXUP_KWARGS
 - `configs/g5_config.py`: MIXUP_KWARGS
 
 Current default configuration:

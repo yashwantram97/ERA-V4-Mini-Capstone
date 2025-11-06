@@ -10,8 +10,8 @@ Choose the appropriate configuration for your hardware:
 2. AWS g5.12xlarge (4x A10G GPUs):
    python train.py --config g5
 
-3. AWS p3.16xlarge (8x V100 GPUs):
-   python train.py --config p3
+3. AWS p4d.24xlarge (8x A100 GPUs):
+   python train.py --config p4
 
 For more details, see: configs/README.md
 """

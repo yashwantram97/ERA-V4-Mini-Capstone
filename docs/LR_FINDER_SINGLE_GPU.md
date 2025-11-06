@@ -119,7 +119,7 @@ imagenet_dm = ImageNetDataModule(
 |--------|----------------|---------|-----------------|------------|
 | local  | 64             | 1       | 64              | ~4-6 GB ✅ |
 | g5     | 256            | 4       | **64** ↓        | ~4-6 GB ✅ |
-| p3     | 256            | 8       | **32** ↓        | ~2-4 GB ✅ |
+| p4     | 1024           | 8       | **128** ↓       | ~8-10 GB ✅ |
 
 ### Additional Features
 
@@ -157,10 +157,10 @@ python find_lr.py --config g5 --runs 3
 # Memory: ~4-6 GB per GPU
 ```
 
-### AWS p3.16xlarge (8x V100)
+### AWS p4d.24xlarge (8x A100)
 ```bash
-python find_lr.py --config p3 --runs 3
-# Batch size: 256 → 32 (auto-scaled)
+python find_lr.py --config p4 --runs 3
+# Batch size: 1024 → 128 (auto-scaled)
 # Memory: ~2-4 GB per GPU
 ```
 
@@ -188,7 +188,7 @@ python find_lr.py --config g5 --runs 3 --batch-size 32
 # Test with each config
 python find_lr.py --config local --runs 1
 python find_lr.py --config g5 --runs 1      # Should auto-scale to 64
-python find_lr.py --config p3 --runs 1      # Should auto-scale to 32
+python find_lr.py --config p4 --runs 1      # Should auto-scale to 128
 
 # Test manual override
 python find_lr.py --config g5 --runs 1 --batch-size 16
@@ -315,7 +315,7 @@ if torch.cuda.is_available():
 # ═══════════════════════════════════════════════════════════════
 
 # Basic usage (auto-detects everything)
-python find_lr.py --config [local|g5|p3] --runs 3
+python find_lr.py --config [local|g5|p4] --runs 3
 
 # Manual batch size override
 python find_lr.py --config g5 --runs 3 --batch-size 32
@@ -323,7 +323,7 @@ python find_lr.py --config g5 --runs 3 --batch-size 32
 # Batch size auto-scaling:
 #   local: 64 → 64 (no change)
 #   g5:    256 → 64 (÷4 GPUs)
-#   p3:    256 → 32 (÷8 GPUs)
+#   p4:    1024 → 128 (÷8 GPUs)
 
 # Expected memory usage:
 #   batch=32:  ~2-4 GB

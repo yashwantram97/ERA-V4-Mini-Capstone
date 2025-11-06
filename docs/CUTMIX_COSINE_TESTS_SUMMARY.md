@@ -467,7 +467,7 @@ After reviewing these tests, you'll understand:
 
 ### Compatibility
 - ✅ Works with local config
-- ✅ Works with AWS configs (p3, g5)
+- ✅ Works with AWS configs (p4, g5)
 - ✅ Compatible with DDP training
 - ✅ Works with different batch sizes
 - ✅ Supports both CPU and GPU

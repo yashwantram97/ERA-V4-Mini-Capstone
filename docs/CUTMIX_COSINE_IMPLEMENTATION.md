@@ -316,7 +316,7 @@ Before using in production, verify:
 - [x] All tests pass locally
 - [x] Visual outputs look correct
 - [x] Configuration matches your setup
-- [x] Tests work with your config (local/p3/g5)
+- [x] Tests work with your config (local/p4/g5)
 - [x] No linter errors
 - [x] Documentation is clear
 

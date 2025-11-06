@@ -109,7 +109,7 @@ All plots saved to `verification_outputs/`:
 | `src/models/resnet_module.py` | Model + OneCycle scheduler |
 | `src/callbacks/resolution_schedule_callback.py` | Progressive resizing logic |
 | `configs/local_config.py` | Local training config |
-| `configs/p3_config.py` | AWS P3 instance config |
+| `configs/p4_config.py` | AWS P4 instance config |
 | `configs/g5_config.py` | AWS G5 instance config |
 
 ---
@@ -142,7 +142,7 @@ Once local test passes, run full training:
 
 ```bash
 # For P3 instances
-python train.py --config p3 --max_epochs 60
+python train.py --config p4 --max_epochs 90
 
 # For G5 instances  
 python train.py --config g5 --max_epochs 60

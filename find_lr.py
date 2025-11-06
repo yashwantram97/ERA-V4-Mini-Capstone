@@ -5,7 +5,7 @@ This script runs the LR finder multiple times and provides statistics
 to help you choose a more reliable learning rate.
 
 ⚠️  IMPORTANT: This script runs on SINGLE GPU/CPU only (not distributed).
-For multi-GPU configs (g5, p3), the batch size is automatically scaled down
+For multi-GPU configs (g5, p4), the batch size is automatically scaled down
 to prevent OOM errors.
 
 Usage:
@@ -15,8 +15,8 @@ Usage:
     # AWS g5.12xlarge (auto-scales from 256 to 64 per GPU)
     python find_lr.py --config g5 --runs 3
     
-    # AWS p3.16xlarge (auto-scales from 256 to 32 per GPU)
-    python find_lr.py --config p3 --runs 3
+    # AWS p4d.24xlarge (auto-scales from 1024 to 128 per GPU)
+    python find_lr.py --config p4 --runs 3
     
     # Manual batch size override (if still getting OOM)
     python find_lr.py --config g5 --runs 3 --batch-size 32
@@ -48,7 +48,7 @@ def main():
         '--config',
         type=str,
         default='local',
-        choices=['local', 'g5', 'p3'],
+        choices=['local', 'g5', 'p4'],
         help='Hardware configuration profile (default: local)'
     )
     parser.add_argument(

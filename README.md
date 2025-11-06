@@ -8,6 +8,24 @@ This project implements state-of-the-art training techniques for ImageNet classi
 
 **🎉 Training Results: Achieved 77.45% top-1 accuracy on ImageNet-1K, exceeding the 75% target by 2.45%!**
 
+## 🎮 Try It Out
+
+**🚀 Live Demo:** [ResNet-50 ImageNet Classifier on Hugging Face](https://huggingface.co/spaces/yashwantram/resnet-imagenet-1k)
+
+Try our trained model directly in your browser! Upload any image and see the ResNet-50 model classify it into one of 1000 ImageNet categories.
+
+## 🏗️ Architecture Overview
+
+Our training pipeline leverages AWS cloud infrastructure with S3 storage and EC2 compute instances for efficient distributed training:
+
+![Architecture Diagram](assets/arch-dig.png)
+
+The architecture includes:
+- **S3 Storage** for dataset and checkpoint management
+- **EC2 Spot Instances** (p4d.24xlarge) for cost-effective multi-GPU training
+- **PyTorch Lightning** for distributed training orchestration
+- **Automated checkpoint syncing** for fault tolerance
+
 ## 📊 Datasets
 
 This project supports two dataset variants:
@@ -49,12 +67,20 @@ This project supports two dataset variants:
 |--------|-------|
 | **Best Validation Accuracy** | **77.45%** (top-1) |
 | **Target Accuracy** | 75% ✅ **EXCEEDED by 2.45%** |
-| **Training Time (p3.16xlarge)** | 356 minutes (~6 hours) |
+| **Training Time (p4d.24xlarge)** | 356 minutes (~6 hours) |
 | **Total Epochs** | 90 |
 | **Best Model Checkpoint** | Epoch 90 |
 | **Model** | ResNet-50 with BlurPool |
 | **Parameters** | 25,576,264 (~25M) |
 | **Training Cost (AWS p4.24xlarge)** | ~$15-25 per run |
+
+#### Training Environment
+
+All training was conducted on AWS EC2 infrastructure:
+
+![EC2 Training Proof](assets/ec2-proof.png)
+
+*Training session running on AWS EC2 p4d.24xlarge instance with 8x NVIDIA A100 GPUs*
 
 ### Training Timeline (Actual Results)
 
@@ -85,7 +111,7 @@ This project includes **three optimized hardware profiles** that automatically c
 |---------|----------|------|------------|---------|----------|
 | `local` | MacBook M4 Pro | 1 (MPS) | 32-64 | 4 | Development & Testing |
 | `g5` | AWS g5.12xlarge | 4x A10G | 256-512 | 12 | Cost-Effective Training |
-| `p4` | AWS p4.24xlarge | 8x V100 | 256-768 | 16 | Production Training |
+| `p4` | AWS p4d.24xlarge | 8x A100 | 256-1024 | 10 | Production Training |
 
 ### Quick Start
 
@@ -96,7 +122,7 @@ python train.py --config local
 # Train on AWS g5.12xlarge (4x A10G)
 python train.py --config g5
 
-# Train on AWS p4d.24xlarge (8x V100)
+# Train on AWS p4d.24xlarge (8x A100)
 python train.py --config p4
 
 # List all available configurations
@@ -157,12 +183,12 @@ The easiest way to train is using the hardware-specific configuration system:
 # Basic training
 python train.py --config local   # For MacBook M4 Pro
 python train.py --config g5     # For AWS g5.12xlarge
-python train.py --config p3      # For AWS p3.16xlarge
+python train.py --config p4      # For AWS p4d.24xlarge
 
 # Advanced options
 python train.py --config g5 --lr 0.001                   # Custom learning rate
-python train.py --config p3 --resume path/to/last.ckpt   # Resume training
-python train.py --config p3 --lr 0.005                   # Combine options
+python train.py --config p4 --resume path/to/last.ckpt   # Resume training
+python train.py --config p4 --lr 0.005                   # Combine options
 
 # Find optimal learning rate
 python find_lr.py --config local
@@ -191,8 +217,8 @@ jupyter notebook notebook-p3.16xlarge.ipynb
 ├── configs/                    # Hardware-specific configurations
 │   ├── README.md              # Detailed configuration documentation
 │   ├── local_config.py        # MacBook M4 Pro settings
-│   ├── g5d_config.py          # AWS g5.12xlarge settings
-│   ├── p3_config.py           # AWS p3.16xlarge settings
+│   ├── g5_config.py           # AWS g5.12xlarge settings
+│   ├── p4_config.py           # AWS p4d.24xlarge settings
 │   └── config_manager.py      # Configuration management system
 ├── src/                        # Source code
 │   ├── models/                # Model architectures
@@ -201,7 +227,7 @@ jupyter notebook notebook-p3.16xlarge.ipynb
 │   └── utils/                 # Utility functions
 ├── notebooks/                  # Jupyter notebooks for experimentation
 │   ├── notebook-local.ipynb   # Local training (M4 Pro + ImageNet-Mini)
-│   └── notebook-p3.16xlarge.ipynb  # Production (8x V100 + ImageNet-1K)
+│   └── notebook-p4d.24xlarge.ipynb  # Production (8x A100 + ImageNet-1K)
 ├── docs/
 │   └── recipes.md             # Detailed explanation of techniques
 ├── logs/                      # Training logs and checkpoints
@@ -219,12 +245,12 @@ jupyter notebook notebook-p3.16xlarge.ipynb
 
 ## 🛠️ Hardware Configurations
 
-### AWS p3.16xlarge (Production)
-- **GPUs:** 8x NVIDIA V100 (16GB VRAM each)
-- **vCPUs:** 64
-- **Batch Size:** 4,096 → 2,560 → 2,048 (total across GPUs)
-- **Training Time:** ~10-11 hours for full ImageNet-1K
-- **Best For:** Full ImageNet training
+### AWS p4d.24xlarge (Production)
+- **GPUs:** 8x NVIDIA A100 (40GB VRAM each)
+- **vCPUs:** 96
+- **Batch Size:** 1024 (128 per GPU across 8 GPUs)
+- **Training Time:** ~6 hours for full ImageNet-1K (90 epochs)
+- **Best For:** Full ImageNet training with superior A100 performance
 
 ### MacBook M4 Pro (Local/Development)
 - **GPU:** 1x Apple Silicon (MPS)

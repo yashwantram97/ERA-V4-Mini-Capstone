@@ -52,15 +52,17 @@ This directory contains hardware-specific configuration profiles optimized for d
 **Expected Training Time:** ~4-6 hours for 90 epochs  
 **Cost:** ~$5-10 per full training run
 
-### 3. AWS p3.16xlarge (`p3`)
-**Profile Name:** `p3`  
-**Best for:** Large-scale training, fastest training time
+### 3. AWS p4d.24xlarge (`p4`)
+**Profile Name:** `p4`  
+**Best for:** Large-scale training, fastest training time with A100s
 
 **Hardware:**
-- CPUs: 64 vCPUs (Intel Xeon E5-2686 v4)
-- GPUs: 8x NVIDIA V100 (16GB HBM2 each)
-- Memory: 488GB RAM
-- Network: 25 Gbps
+- CPUs: 96 vCPUs (Intel Xeon Platinum 8275CL)
+- GPUs: 8x NVIDIA A100 (40GB HBM2 each)
+- Memory: 1152GB RAM
+- Network: 400 Gbps (4x 100 Gbps EFA)
+- Storage: 8x 1TB NVMe SSD
+- NVLink: 600GB/s GPU-GPU bandwidth
 
 **Dataset:**
 - Path: `/home/ec2-user/imagenet1k/`
@@ -68,14 +70,14 @@ This directory contains hardware-specific configuration profiles optimized for d
 - Use Case: Production training
 
 **Optimizations:**
-- High batch sizes across 8 GPUs (256-768)
-- Maximum workers (16)
+- High batch sizes across 8 A100 GPUs (1024 total)
+- Optimized workers (10)
 - DDP strategy for 8-GPU training
-- Aggressive progressive resizing
-- Tensor Core optimization
+- Progressive resizing + FixRes
+- Superior A100 Tensor Core optimization
 
-**Expected Training Time:** ~2-3 hours for 90 epochs  
-**Cost:** ~$15-25 per full training run
+**Expected Training Time:** ~6 hours for 90 epochs  
+**Cost:** ~$25-35 per full training run (spot pricing)
 
 ## Usage
 
@@ -87,14 +89,14 @@ python train.py --config local
 # Train on AWS g5.12xlarge
 python train.py --config g5
 
-# Train on AWS p3.16xlarge
-python train.py --config p3
+# Train on AWS p4d.24xlarge
+python train.py --config p4
 
 # Override learning rate (uses config value if not specified)
 python train.py --config g5 --lr 0.001
 
 # Combine multiple options
-python train.py --config p3 --lr 0.005
+python train.py --config p4 --lr 0.005
 
 # Resume from checkpoint
 python train.py --config g5 --resume logs/experiment/checkpoints/last.ckpt
@@ -112,7 +114,7 @@ config = get_config('local')
 # or
 config = get_config('g5')
 # or
-config = get_config('p3')
+config = get_config('p4')
 
 # Access config values
 print(f"Batch size: {config.batch_size}")
@@ -294,7 +296,7 @@ configs/
 ├── config_manager.py        # Configuration management
 ├── local_config.py          # MacBook M4 Pro config (self-contained)
 ├── g5_config.py             # AWS g5.12xlarge config (self-contained)
-└── p3_config.py             # AWS p3.16xlarge config (self-contained)
+└── p4_config.py             # AWS p4d.24xlarge config (self-contained)
 ```
 
 **Note:** Each config file is now self-contained with all settings included. This makes it easier to see and modify all configurations for a specific hardware profile without needing to reference a base config file.

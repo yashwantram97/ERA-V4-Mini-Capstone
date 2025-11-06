@@ -60,7 +60,7 @@ schedule = create_progressive_resize_schedule(
 
 ### Usage in Config
 
-All config files (`local_config.py`, `g5_config.py`, `p3_config.py`) now use this approach:
+All config files (`local_config.py`, `g5_config.py`, `p4_config.py`) now use this approach:
 
 ```python
 # configs/g5_config.py
@@ -206,6 +206,6 @@ Based on MosaicML's findings:
 - `src/callbacks/__init__.py` - Exported new function
 - `configs/g5_config.py` - Updated to use Composer approach
 - `configs/local_config.py` - Updated to use Composer approach
-- `configs/p3_config.py` - Updated to use Composer approach
+- `configs/p4_config.py` - Updated to use Composer approach
 - `test_progressive_schedule.py` - Test script to visualize schedules
 

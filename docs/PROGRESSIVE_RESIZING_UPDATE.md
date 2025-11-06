@@ -15,7 +15,7 @@ Created `create_progressive_resize_schedule()` in `src/callbacks/resolution_sche
 - Optional FixRes support for +1-2% accuracy boost
 
 ### 2. Updated All Configs
-Modified `g5_config.py`, `local_config.py`, and `p3_config.py` to use:
+Modified `g5_config.py`, `local_config.py`, and `p4_config.py` to use:
 ```python
 PROG_RESIZING_FIXRES_SCHEDULE = create_progressive_resize_schedule(
     total_epochs=EPOCHS,

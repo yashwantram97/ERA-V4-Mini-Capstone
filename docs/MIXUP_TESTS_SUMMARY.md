@@ -221,7 +221,7 @@ MixUp is tested at these integration points:
 ### Implementation
 - `src/models/resnet_module.py` - MixUp integration
 - `configs/local_config.py` - Local config
-- `configs/p3_config.py` - P3 instance config
+- `configs/p4_config.py` - P4 instance config
 - `configs/g5_config.py` - G5 instance config
 
 ### Tests

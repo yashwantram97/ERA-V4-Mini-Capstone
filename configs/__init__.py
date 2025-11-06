@@ -5,7 +5,7 @@ Usage:
     from configs import get_config
     
     # Get specific config
-    config = get_config('local')  # or 'g5' or 'p3'
+    config = get_config('local')  # or 'g5' or 'p4'
     
     # Or from command line
     python train.py --config local

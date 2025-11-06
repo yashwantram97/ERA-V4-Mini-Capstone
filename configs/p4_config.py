@@ -1,19 +1,20 @@
 """
-Configuration for AWS p3.16xlarge Instance
+Configuration for AWS p4d.24xlarge Instance
 
 Hardware Specs:
-- CPUs: 64 vCPUs (32 cores, Intel Xeon E5-2686 v4)
-- GPUs: 8x NVIDIA V100 (16GB HBM2 each)
-- Memory: 488GB RAM
-- Network: 25 Gbps
-- Storage: EBS optimized
+- CPUs: 96 vCPUs (48 cores, Intel Xeon Platinum 8275CL)
+- GPUs: 8x NVIDIA A100 (40GB HBM2 each)
+- Memory: 1152GB RAM
+- Network: 400 Gbps (4x 100 Gbps EFA)
+- Storage: 8x 1TB NVMe SSD
+- NVLink: 600GB/s GPU-GPU bandwidth
 
 Optimizations:
-- High batch sizes across 8 GPUs
+- High batch sizes across 8 A100 GPUs
 - Maximum workers for data loading
 - Progressive resizing following MosaicML Composer's proven approach
-- Full mixed precision training
-- Optimal for large-scale training
+- Full mixed precision training (bf16 support)
+- Optimal for large-scale training with superior A100 performance
 """
 
 from pathlib import Path
@@ -23,8 +24,8 @@ from src.callbacks import create_progressive_resize_schedule
 PROJECT_ROOT = Path(__file__).parent.parent
 
 # Hardware profile name
-PROFILE_NAME = "p3"
-PROFILE_DESCRIPTION = "AWS p3.16xlarge - 8x NVIDIA V100 GPUs"
+PROFILE_NAME = "p4"
+PROFILE_DESCRIPTION = "AWS p4d.24xlarge - 8x NVIDIA A100 GPUs"
 
 # Dataset paths (AWS EC2 environment)
 TRAIN_IMG_DIR = Path("/home/ec2-user/imagenet1k/train")
@@ -43,22 +44,22 @@ MEAN = (0.485, 0.456, 0.406)
 STD = (0.229, 0.224, 0.225)
 
 # Experiment naming
-EXPERIMENT_NAME = "imagenet_p3_training"
+EXPERIMENT_NAME = "imagenet_p4_training"
 
 # Training settings
-EPOCHS = 60
-BATCH_SIZE = 1024  # Per GPU: 256, Total effective: 256 * 8 = 2048
+EPOCHS = 90
+BATCH_SIZE = 1024  # Per GPU: 128, Total effective: 128 * 8 = 1024
 LEARNING_RATE = 1.024  # Found with LR finder
 WEIGHT_DECAY = 1e-4
 SCHEDULER_TYPE = 'one_cycle_policy'
 ACCUMULATE_GRAD_BATCHES = 1
 # DataLoader settings - maximize data throughput
 NUM_WORKERS = 10
-# V100 is compute-bound, not data-bound, so 2 workers per GPU is sufficient
+# A100 is compute-bound, not data-bound, so 10 workers per GPU is sufficient
 S3_DIR="s3://imagenet-resnet-50-erav4/data/"
 
 # Precision settings
-PRECISION = "16-mixed"  # V100 has excellent Tensor Core support
+PRECISION = "16-mixed"  # A100 has excellent Tensor Core support (can also use bf16-mixed)
 
 # Progressive Resizing + FixRes Schedule
 # Combines progressive resizing with FixRes for optimal training efficiency and accuracy
@@ -73,33 +74,33 @@ PRECISION = "16-mixed"  # V100 has excellent Tensor Core support
 # • Fine-tunes at higher resolution with minimal augmentation
 # • Expected: +1-2% validation accuracy
 #
-# Schedule breakdown for 60 epochs:
-# Phase 1 (Epochs 0-17, 30%): 144px, train mode
-#   - Fast training at 64% resolution
+# Schedule breakdown for 90 epochs:
+# Phase 1 (Epochs 0-17, 20%): 224px, train mode
+#   - Fast training at standard resolution
 #   - Strong augmentation for robustness
 #
-# Phase 2 (Epochs 18-41, 40%): 144→224px, train mode
-#   - Progressive increase to full resolution
-#   - Smooth curriculum learning transition
-#
-# Phase 3 (Epochs 42-53, 20%): 224px, train mode
+# Phase 2 (Epochs 18-70, 60%): 224px, train mode
 #   - Standard training at full resolution
 #   - Convergence to optimal weights
 #
-# Phase 4 (Epochs 54-59, 10%): 256px, fixres mode
-#   - Higher resolution (256px) for finer details
+# Phase 3 (Epochs 71-80, 10%): 256px, train mode
+#   - Higher resolution training
+#   - Preparing for FixRes fine-tuning
+#
+# Phase 4 (Epochs 81-89, 10%): 288px, fixres mode
+#   - Even higher resolution (288px) for finest details
 #   - Minimal augmentation bridges train-test gap
 #   - Final accuracy boost
 PROG_RESIZING_FIXRES_SCHEDULE = create_progressive_resize_schedule(
     total_epochs=EPOCHS,
     target_size=224,          # Standard ImageNet resolution
-    initial_scale=1.0,       # Start at 144px (64% of 224px)
-    delay_fraction=0.0,       # 30% at initial scale
-    finetune_fraction=1.0,    # 30% at full resolution
+    initial_scale=1.0,        # Start at 224px 
+    delay_fraction=0.0,       # Start immediately
+    finetune_fraction=1.0,    # Progressive throughout
     size_increment=4,         # Round to multiples of 4
     use_fixres=True,          # Enable FixRes for +1-2% accuracy boost
-    fixres_size=256,          # Higher resolution for FixRes phase (256px)
-    fixres_epochs=10           # Last 9 epochs (10% of 90) for FixRes fine-tuning
+    fixres_size=288,          # Higher resolution for FixRes phase (288px)
+    fixres_epochs=10          # Last 10 epochs for FixRes fine-tuning
 )
 
 # Early stopping - more patience for full training
@@ -119,7 +120,7 @@ CHECK_VAL_EVERY_N_EPOCH = 1
 GRADIENT_CLIP_VAL = 1.0
 
 # Multi-GPU settings
-NUM_DEVICES = 8  # Use all 8 V100 GPUs
+NUM_DEVICES = 8  # Use all 8 A100 GPUs
 STRATEGY = "ddp"  # Distributed Data Parallel
 
 # LR Finder settings
@@ -151,14 +152,16 @@ ONECYCLE_KWARGS = {
 # }
 MIXUP_KWARGS = None
 
-# Additional optimizations for p3.16xlarge
+# Additional optimizations for p4d.24xlarge
 # Set these in your training script:
 # - Use pin_memory=True in dataloaders (plenty of RAM)
 # - Consider using NCCL backend for multi-GPU communication
 # - Monitor GPU utilization to ensure you're compute-bound
+# - A100s support bfloat16 for better numerical stability if needed
 
 # Note: Most powerful option, best for production training
-# Expected training time: ~7-8 hours for 60 epochs
-# Cost: ~$35-45 per training run
+# Expected training time: ~6 hours for 90 epochs on A100s
+# Cost: ~$25-35 per training run (spot pricing)
 # Recommended for: Final model training, hyperparameter sweeps
+
 

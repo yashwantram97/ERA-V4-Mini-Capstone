@@ -107,7 +107,7 @@ Your training configuration comes from:
 ```
 configs/
 ├── local_config.py    ← For MacBook local testing
-├── p3_config.py       ← For AWS p3 instances
+├── p4_config.py       ← For AWS p4 instances
 └── g5_config.py       ← For AWS g5 instances
 ```
 
@@ -202,7 +202,7 @@ Once verification passes:
 
 2. **AWS training:**
    ```bash
-   python train.py --config p3 --max_epochs 60
+   python train.py --config p4 --max_epochs 90
    ```
 
 3. **Monitor with TensorBoard:**

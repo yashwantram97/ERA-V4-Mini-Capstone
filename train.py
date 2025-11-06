@@ -16,7 +16,7 @@ Benefits over manual training loops:
 Usage:
     python train.py --config local   # For MacBook M4 Pro
     python train.py --config g5     # For AWS g5.12xlarge
-    python train.py --config p3      # For AWS p3.16xlarge
+    python train.py --config p4      # For AWS p4d.24xlarge
 """
 
 import argparse
@@ -235,8 +235,8 @@ Examples:
   # Train on AWS g5.12xlarge
   python train.py --config g5
   
-  # Train on AWS p3.16xlarge
-  python train.py --config p3
+  # Train on AWS p4d.24xlarge
+  python train.py --config p4
   
   # Custom learning rate
   python train.py --config g5 --lr 0.001
@@ -253,7 +253,7 @@ Examples:
         '--config',
         type=str,
         default='local',
-        choices=['local', 'g5', 'p3'],
+        choices=['local', 'g5', 'p4'],
         help='Hardware configuration profile (default: local)'
     )
     

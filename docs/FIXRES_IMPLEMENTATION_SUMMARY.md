@@ -69,7 +69,7 @@ Updated all three config files with proper FixRes schedules:
 - Epochs 81-89: 256px, fixres mode (9 epochs)
 - No progressive resizing (train at full 224px throughout)
 
-#### p3_config.py (AWS p3.16xlarge - 8x V100)
+#### p4_config.py (AWS p4d.24xlarge - 8x A100)
 - 60 epochs total
 - Epochs 0-17: 144px, train mode
 - Epochs 18-41: 144→224px, train mode (progressive)
@@ -231,7 +231,7 @@ During training, you'll see logs like:
 2. `src/callbacks/resolution_schedule_callback.py` - Updated to use transform modes
 3. `src/data_modules/imagenet_datamodule.py` - Changed to transform_mode parameter
 4. `configs/g5_config.py` - Updated schedule and documentation
-5. `configs/p3_config.py` - Updated schedule and documentation
+5. `configs/p4_config.py` - Updated schedule and documentation
 6. `configs/local_config.py` - Updated schedule and documentation
 7. `docs/FIXRES_IMPLEMENTATION.md` - Comprehensive guide (new)
 8. `docs/FIXRES_IMPLEMENTATION_SUMMARY.md` - This summary (new)
