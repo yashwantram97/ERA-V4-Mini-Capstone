@@ -33,8 +33,9 @@ This project supports two dataset variants:
 1. **BlurPool** - Antialiased downsampling for shift-invariance (+0.5-1% accuracy)
 2. **FixRes** - Fixed resolution fine-tuning at higher resolution (+1-2% accuracy)
 3. **Label Smoothing** - Prevents overconfident predictions (+0.5-1% accuracy)
-4. **Progressive Resizing** - 128px → 224px → 288px (30-40% faster training)
-5. **MixUp** - Data augmentation through linear interpolation (+1-2% accuracy)
+4. **Progressive Resizing** - 128px → 224px → 288px (30-40% faster training) (optional)
+5. **MixUp** - Data augmentation through linear interpolation (+1-2% accuracy) (optional)
+6. **RandomErase** - Randomly selects a rectangle region in a torch.Tensor image and erases its pixels (+1-2% accuracy)
 
 ### Additional Optimizations
 - **Channels Last Memory Format** - 10-30% faster on modern GPUs
@@ -50,10 +51,10 @@ This project supports two dataset variants:
 | **Target Accuracy** | 75% ✅ **EXCEEDED by 2.45%** |
 | **Training Time (p3.16xlarge)** | 356 minutes (~6 hours) |
 | **Total Epochs** | 90 |
-| **Best Model Checkpoint** | Epoch 89 |
+| **Best Model Checkpoint** | Epoch 90 |
 | **Model** | ResNet-50 with BlurPool |
 | **Parameters** | 25,576,264 (~25M) |
-| **Training Cost (AWS p3.16xlarge)** | ~$15-25 per run |
+| **Training Cost (AWS p4.24xlarge)** | ~$15-25 per run |
 
 ### Training Timeline (Actual Results)
 
@@ -84,7 +85,7 @@ This project includes **three optimized hardware profiles** that automatically c
 |---------|----------|------|------------|---------|----------|
 | `local` | MacBook M4 Pro | 1 (MPS) | 32-64 | 4 | Development & Testing |
 | `g5` | AWS g5.12xlarge | 4x A10G | 256-512 | 12 | Cost-Effective Training |
-| `p3` | AWS p3.16xlarge | 8x V100 | 256-768 | 16 | Production Training |
+| `p4` | AWS p4.24xlarge | 8x V100 | 256-768 | 16 | Production Training |
 
 ### Quick Start
 
@@ -95,8 +96,8 @@ python train.py --config local
 # Train on AWS g5.12xlarge (4x A10G)
 python train.py --config g5
 
-# Train on AWS p3.16xlarge (8x V100)
-python train.py --config p3
+# Train on AWS p4d.24xlarge (8x V100)
+python train.py --config p4
 
 # List all available configurations
 python train.py --list-configs
@@ -116,7 +117,7 @@ For detailed configuration options, see [`configs/README.md`](configs/README.md)
 ### Prerequisites
 
 ```bash
-pip install -r requirements.txt
+uv sync
 ```
 
 Required packages:
@@ -125,7 +126,7 @@ Required packages:
 - `pytorch_lightning`
 - `pytorch_optimizer`
 - `torchmetrics`
-- `antialiased-cnns`
+- `timm`
 
 ### Dataset Setup
 
@@ -168,7 +169,7 @@ python find_lr.py --config local
 python find_lr.py --config g5 --lr 0.0001  # Custom starting LR
 ```
 
-#### Using Jupyter Notebooks (Alternative)
+#### Using Jupyter Notebooks (Used for experimentation)
 
 ```bash
 # Local training (ImageNet-Mini on M4 Pro)
@@ -234,11 +235,7 @@ jupyter notebook notebook-p3.16xlarge.ipynb
 
 ## 📖 References
 
-1. Zhang, R. (2019). [Making Convolutional Networks Shift-Invariant Again](https://arxiv.org/abs/1904.11486). ICML.
-2. Touvron, H., et al. (2019). [Fixing the train-test resolution discrepancy](https://arxiv.org/abs/1906.06423). NeurIPS.
-3. Szegedy, C., et al. (2016). [Rethinking the Inception Architecture](https://arxiv.org/abs/1512.00567). CVPR.
-4. Zhang, H., et al. (2017). [mixup: Beyond Empirical Risk Minimization](https://arxiv.org/abs/1710.09412). ICLR.
-5. Howard, J., & Gugger, S. (2020). Deep Learning for Coders with fastai and PyTorch. O'Reilly.
+1. mosaic resnet experiment - [github link](https://github.com/mosaicml/examples/tree/main/examples/benchmarks/resnet_imagenet)
 
 ## 🎓 Learning Resources
 
@@ -250,5 +247,5 @@ This project is for educational purposes.
 
 ---
 
-**Note:** Adjust batch sizes and worker counts based on your hardware capabilities. The provided configurations are optimized for AWS p3.16xlarge and MacBook M4 Pro respectively.
+**Note:** Adjust batch sizes and worker counts based on your hardware capabilities. The provided configurations are optimized for AWS p4d.24xlarge and MacBook M4 Pro respectively.
 
